@@ -1,6 +1,7 @@
 const express = require("express")
 const router = express.Router()
-const { pool, authenticateToken } = require("../index")
+const { pool } = require("../config/database")
+const { authenticateToken } = require("../middleware/auth")
 const { validatePayment } = require("../middleware/validation")
 
 // Get all payments for a contract

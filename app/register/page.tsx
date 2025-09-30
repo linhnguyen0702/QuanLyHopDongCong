@@ -93,8 +93,8 @@ export default function RegisterPage() {
     },
     { text: "Có số", met: /\d/.test(formData.password) },
     {
-      text: "Có ký tự đặc biệt",
-      met: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password),
+      text: "Có ký tự đặc biệt (@$!%*?&)",
+      met: /[@$!%*?&]/.test(formData.password),
     },
   ];
 

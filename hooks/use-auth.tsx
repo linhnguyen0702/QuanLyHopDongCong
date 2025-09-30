@@ -1,146 +1,194 @@
-"use client"
+"use client";
 
-import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
-import { authApi, getAuthToken, setAuthToken, removeAuthToken } from "@/lib/api"
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  type ReactNode,
+} from "react";
+import { useRouter } from "next/navigation";
+import {
+  authApi,
+  getAuthToken,
+  setAuthToken,
+  removeAuthToken,
+  type AuthResponse,
+} from "@/lib/api";
 
 interface User {
-  id: number
-  fullName: string
-  email: string
-  company: string
-  role: string
+  id: number;
+  fullName: string;
+  email: string;
+  company: string;
+  role: string;
+  department?: string;
+  phone?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface AuthContextType {
-  user: User | null
-  loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
   register: (userData: {
-    fullName: string
-    email: string
-    password: string
-    company: string
-    role?: string
-  }) => Promise<void>
-  logout: () => void
-  updateProfile: (data: { fullName: string; company: string }) => Promise<void>
-  changePassword: (data: { currentPassword: string; newPassword: string }) => Promise<void>
+    fullName: string;
+    email: string;
+    password: string;
+    company: string;
+    role?: string;
+  }) => Promise<void>;
+  logout: () => void;
+  updateProfile: (data: {
+    fullName: string;
+    company: string;
+    department?: string;
+    phone?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (data: {
+    currentPassword: string;
+    newPassword: string;
+  }) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   // Check if user is authenticated on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const token = getAuthToken()
+      // Only run on client side
+      if (typeof window === "undefined") return;
+
+      const token = getAuthToken();
       if (!token) {
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
 
       try {
-        const response = await authApi.getProfile()
+        const response = await authApi.getProfile();
         if (response.success && response.data) {
-          setUser(response.data.user)
+          setUser(response.data as User);
         } else {
-          removeAuthToken()
+          removeAuthToken();
         }
       } catch (error) {
-        console.error("Auth check failed:", error)
-        removeAuthToken()
+        console.error("Auth check failed:", error);
+        removeAuthToken();
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    checkAuth()
-  }, [])
+    checkAuth();
+  }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await authApi.login({ email, password })
+      const response = (await authApi.login({
+        email,
+        password,
+      })) as AuthResponse;
       if (response.success && response.data) {
-        setAuthToken(response.data.token)
-        setUser(response.data.user)
-        router.push("/")
+        setAuthToken(response.data.token);
+        setUser(response.data.user);
+        router.push("/");
       } else {
-        throw new Error(response.message || "Login failed")
+        throw new Error(response.message || "Login failed");
       }
     } catch (error) {
-      console.error("Login error:", error)
-      throw error
+      console.error("Login error:", error);
+      throw error;
     }
-  }
+  };
 
   const register = async (userData: {
-    fullName: string
-    email: string
-    password: string
-    company: string
-    role?: string
+    fullName: string;
+    email: string;
+    password: string;
+    company: string;
+    role?: string;
   }) => {
     try {
-      const response = await authApi.register(userData)
+      const response = (await authApi.register(userData)) as AuthResponse;
       if (response.success && response.data) {
-        setAuthToken(response.data.token)
-        setUser(response.data.user)
-        router.push("/")
+        setAuthToken(response.data.token);
+        setUser(response.data.user);
+        router.push("/");
       } else {
-        throw new Error(response.message || "Registration failed")
+        throw new Error(response.message || "Registration failed");
       }
     } catch (error) {
-      console.error("Registration error:", error)
-      throw error
+      console.error("Registration error:", error);
+      throw error;
     }
-  }
+  };
 
   const logout = async () => {
     try {
-      await authApi.logout()
+      // Try to notify server, but don't block logout if it fails
+      await authApi.logout();
     } catch (error) {
-      console.error("Logout error:", error)
-    } finally {
-      removeAuthToken()
-      setUser(null)
-      router.push("/login")
+      console.error("Server logout error (continuing anyway):", error);
     }
-  }
 
-  const updateProfile = async (data: { fullName: string; company: string }) => {
+    // Always clear client-side auth state
+    removeAuthToken();
+    setUser(null);
+    router.push("/login");
+  };
+
+  const updateProfile = async (data: {
+    fullName: string;
+    company: string;
+    department?: string;
+    phone?: string;
+  }) => {
     try {
-      const response = await authApi.updateProfile(data)
+      const response = await authApi.updateProfile(data);
       if (response.success) {
         // Refresh user data
-        const profileResponse = await authApi.getProfile()
+        const profileResponse = await authApi.getProfile();
         if (profileResponse.success && profileResponse.data) {
-          setUser(profileResponse.data.user)
+          setUser(profileResponse.data as User);
         }
+        return { success: true };
       } else {
-        throw new Error(response.message || "Profile update failed")
+        return {
+          success: false,
+          error: response.message || "Profile update failed",
+        };
       }
     } catch (error) {
-      console.error("Profile update error:", error)
-      throw error
+      console.error("Profile update error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Profile update failed",
+      };
     }
-  }
+  };
 
-  const changePassword = async (data: { currentPassword: string; newPassword: string }) => {
+  const changePassword = async (data: {
+    currentPassword: string;
+    newPassword: string;
+  }) => {
     try {
-      const response = await authApi.changePassword(data)
+      const response = await authApi.changePassword(data);
       if (!response.success) {
-        throw new Error(response.message || "Password change failed")
+        throw new Error(response.message || "Password change failed");
       }
     } catch (error) {
-      console.error("Password change error:", error)
-      throw error
+      console.error("Password change error:", error);
+      throw error;
     }
-  }
+  };
 
   return (
     <AuthContext.Provider
@@ -156,13 +204,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
+  return context;
 }

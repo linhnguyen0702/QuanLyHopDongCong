@@ -1,15 +1,15 @@
 USE contract_management;
 
--- Insert admin user (password: admin123)
+-- Insert admin user (password: Admin123!)
 INSERT INTO users (full_name, email, password, company, role, department, phone) VALUES 
-('Administrator', 'admin@contractmanager.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Contract Manager System', 'admin', 'IT Department', '0901000000');
+('Administrator', 'admin@contractmanager.com', '$2a$10$9Koj3poYVF1NZor0VPHcweo4GwTttsd3md84nGGtDOWi4l9OON7mu', 'Contract Manager System', 'admin', 'IT Department', '0901000000');
 
--- Insert sample users with different roles
+-- Insert sample users with different roles (password: Manager123!, Approver123!, User123!, Approver123!)
 INSERT INTO users (full_name, email, password, company, role, department, phone) VALUES 
-('Nguyễn Văn An', 'nguyen.van.an@company.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Công ty TNHH ABC', 'manager', 'Phòng Kế hoạch', '0901234567'),
-('Trần Thị Bình', 'tran.thi.binh@company.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Tập đoàn XYZ', 'approver', 'Phòng Tài chính', '0912345678'),
-('Lê Minh Cường', 'le.minh.cuong@company.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Công ty DEF', 'user', 'Phòng Kỹ thuật', '0923456789'),
-('Phạm Thị Dung', 'pham.thi.dung@company.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Công ty GHI', 'approver', 'Phòng Pháp chế', '0934567890');
+('Nguyễn Văn An', 'nguyen.van.an@company.com', '$2a$10$YUbpQd6iJeZzeGBn/AdRk.hycXDjA4xGAn/77n/nMgrX7JbBui1lq', 'Công ty TNHH ABC', 'manager', 'Phòng Kế hoạch', '0901234567'),
+('Trần Thị Bình', 'tran.thi.binh@company.com', '$2a$10$xRl6K6q6LH96em/Q5EPxFOgD31KvPUwOVpwyIxlGjvvaoabNgwXNm', 'Tập đoàn XYZ', 'approver', 'Phòng Tài chính', '0912345678'),
+('Lê Minh Cường', 'le.minh.cuong@company.com', '$2a$10$YP1wprcYyMKkGT2COdfgy.nS8VRBwxxAG1BjqJqp8azn1QEDTAFkS', 'Công ty DEF', 'user', 'Phòng Kỹ thuật', '0923456789'),
+('Phạm Thị Dung', 'pham.thi.dung@company.com', '$2a$10$xRl6K6q6LH96em/Q5EPxFOgD31KvPUwOVpwyIxlGjvvaoabNgwXNm', 'Công ty GHI', 'approver', 'Phòng Pháp chế', '0934567890');
 
 -- Insert sample contractors
 INSERT INTO contractors (name, contact_person, email, phone, address, tax_code, bank_account, bank_name, description, rating, total_contracts, total_value) VALUES 
