@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/hooks/use-auth";
+import { useSidebar } from "@/hooks/use-sidebar";
 import {
   FileText,
   BarChart3,
@@ -31,26 +33,48 @@ const navigation = [
 ];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useAuth();
+  const { collapsed, setCollapsed } = useSidebar();
+
+  // Helper function để tạo initials từ tên
+  const getInitials = (fullName: string) => {
+    if (!fullName) return "U";
+    const names = fullName.split(" ");
+    if (names.length >= 2) {
+      return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+    }
+    return fullName.substring(0, 2).toUpperCase();
+  };
 
   return (
     <div
       className={cn(
-        "flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 shadow-sm",
-        collapsed ? "w-16" : "w-64"
+        "flex flex-col h-screen bg-white border-r border-gray-200 shadow-sm",
+        collapsed ? "sidebar-collapsed" : "sidebar-expanded"
       )}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        {!collapsed && (
-          <div className="flex items-center space-x-2">
+        {!collapsed ? (
+          <Link
+            href="/"
+            className="flex items-center space-x-2 hover:opacity-80 transition-opacity cursor-pointer"
+          >
             <Shield className="h-8 w-8 text-violet-600" />
             <div>
               <h1 className="text-lg font-bold text-gray-800">Quản lý HĐ</h1>
               <p className="text-xs text-gray-500">Blockchain System</p>
             </div>
-          </div>
+          </Link>
+        ) : (
+          <Link
+            href="/"
+            className="flex items-center justify-center hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            <Shield className="h-8 w-8 text-violet-600" />
+          </Link>
         )}
         <Button
           variant="ghost"
@@ -99,18 +123,38 @@ export function Sidebar() {
       </ScrollArea>
 
       {/* Footer */}
-      {!collapsed && (
+      {!collapsed && user && (
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center space-x-3">
+          <div
+            className="flex items-center space-x-3 cursor-pointer hover:bg-violet-50 rounded-lg p-2 -m-2 transition-colors"
+            onClick={() => router.push("/profile")}
+          >
             <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center">
-              <span className="text-xs font-medium text-white">AD</span>
+              <span className="text-xs font-medium text-white">
+                {getInitials(user.fullName)}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800 truncate">
-                Admin User
+                {user.fullName}
               </p>
-              <p className="text-xs text-gray-500 truncate">admin@gov.vn</p>
+              <p className="text-xs text-gray-500 truncate">{user.email}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer khi collapsed */}
+      {collapsed && user && (
+        <div className="p-2 border-t border-gray-200 flex justify-center">
+          <div
+            className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-violet-700 transition-colors"
+            onClick={() => router.push("/profile")}
+            title={user.fullName}
+          >
+            <span className="text-xs font-medium text-white">
+              {getInitials(user.fullName)}
+            </span>
           </div>
         </div>
       )}

@@ -1,13 +1,26 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Sidebar } from "@/components/sidebar"
-import { Header } from "@/components/header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState } from "react";
+import { Sidebar } from "@/components/sidebar";
+import { Header } from "@/components/header";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +28,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -23,10 +36,20 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Plus, Search, Filter, MoreHorizontal, Eye, Edit, Trash2, Download, Shield } from "lucide-react"
-import { ContractForm } from "@/components/contract-form"
-import { ContractDetails } from "@/components/contract-details"
+} from "@/components/ui/dialog";
+import {
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  Trash2,
+  Download,
+  Shield,
+} from "lucide-react";
+import { ContractForm } from "@/components/contract-form";
+import { ContractDetails } from "@/components/contract-details";
 
 // Mock data for contracts
 const contracts = [
@@ -78,58 +101,76 @@ const contracts = [
     blockchainHash: null,
     category: "Hạ tầng",
   },
-]
+];
 
 export default function ContractsPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedContract, setSelectedContract] = useState<any>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Đang thực hiện</Badge>
+        return (
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+            Đang thực hiện
+          </Badge>
+        );
       case "completed":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Hoàn thành</Badge>
+        return (
+          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+            Hoàn thành
+          </Badge>
+        );
       case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Chờ phê duyệt</Badge>
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Chờ phê duyệt
+          </Badge>
+        );
       case "draft":
-        return <Badge variant="outline">Bản nháp</Badge>
+        return <Badge variant="outline">Bản nháp</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  }
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
-    }).format(amount)
-  }
+    }).format(amount);
+  };
 
   const filteredContracts = contracts.filter(
     (contract) =>
       contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       contract.contractor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.id.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      contract.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="layout-container bg-background">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="main-content">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="p-6">
           {/* Page Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Quản lý Hợp đồng</h1>
+              <h1 className="text-3xl font-bold text-foreground">
+                Quản lý Hợp đồng
+              </h1>
               <p className="text-muted-foreground mt-2">
-                Quản lý toàn bộ hợp đồng dự án với tích hợp blockchain Hyperledger
+                Quản lý toàn bộ hợp đồng dự án với tích hợp blockchain
+                Hyperledger
               </p>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <Dialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+            >
               <DialogTrigger asChild>
                 <Button className="bg-secondary hover:bg-secondary/90">
                   <Plus className="h-4 w-4 mr-2" />
@@ -140,7 +181,8 @@ export default function ContractsPage() {
                 <DialogHeader>
                   <DialogTitle>Tạo hợp đồng mới</DialogTitle>
                   <DialogDescription>
-                    Nhập thông tin chi tiết cho hợp đồng mới. Dữ liệu sẽ được lưu trữ trên blockchain.
+                    Nhập thông tin chi tiết cho hợp đồng mới. Dữ liệu sẽ được
+                    lưu trữ trên blockchain.
                   </DialogDescription>
                 </DialogHeader>
                 <ContractForm onClose={() => setIsCreateDialogOpen(false)} />
@@ -177,7 +219,9 @@ export default function ContractsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Danh sách hợp đồng</CardTitle>
-              <CardDescription>Tổng cộng {filteredContracts.length} hợp đồng được tìm thấy</CardDescription>
+              <CardDescription>
+                Tổng cộng {filteredContracts.length} hợp đồng được tìm thấy
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -196,20 +240,31 @@ export default function ContractsPage() {
                 <TableBody>
                   {filteredContracts.map((contract) => (
                     <TableRow key={contract.id}>
-                      <TableCell className="font-medium">{contract.id}</TableCell>
+                      <TableCell className="font-medium">
+                        {contract.id}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{contract.title}</p>
-                          <p className="text-sm text-muted-foreground">{contract.category}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {contract.category}
+                          </p>
                         </div>
                       </TableCell>
                       <TableCell>{contract.contractor}</TableCell>
                       <TableCell>{formatCurrency(contract.value)}</TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <p>{new Date(contract.startDate).toLocaleDateString("vi-VN")}</p>
+                          <p>
+                            {new Date(contract.startDate).toLocaleDateString(
+                              "vi-VN"
+                            )}
+                          </p>
                           <p className="text-muted-foreground">
-                            đến {new Date(contract.endDate).toLocaleDateString("vi-VN")}
+                            đến{" "}
+                            {new Date(contract.endDate).toLocaleDateString(
+                              "vi-VN"
+                            )}
                           </p>
                         </div>
                       </TableCell>
@@ -218,10 +273,14 @@ export default function ContractsPage() {
                         {contract.blockchainHash ? (
                           <div className="flex items-center space-x-1">
                             <Shield className="h-4 w-4 text-green-600" />
-                            <span className="text-xs text-green-600">Đã xác thực</span>
+                            <span className="text-xs text-green-600">
+                              Đã xác thực
+                            </span>
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Chưa lưu</span>
+                          <span className="text-xs text-muted-foreground">
+                            Chưa lưu
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -236,8 +295,8 @@ export default function ContractsPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => {
-                                setSelectedContract(contract)
-                                setIsDetailsDialogOpen(true)
+                                setSelectedContract(contract);
+                                setIsDetailsDialogOpen(true);
                               }}
                             >
                               <Eye className="h-4 w-4 mr-2" />
@@ -267,19 +326,27 @@ export default function ContractsPage() {
           </Card>
 
           {/* Contract Details Dialog */}
-          <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <Dialog
+            open={isDetailsDialogOpen}
+            onOpenChange={setIsDetailsDialogOpen}
+          >
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Chi tiết hợp đồng</DialogTitle>
-                <DialogDescription>Thông tin chi tiết và lịch sử giao dịch blockchain</DialogDescription>
+                <DialogDescription>
+                  Thông tin chi tiết và lịch sử giao dịch blockchain
+                </DialogDescription>
               </DialogHeader>
               {selectedContract && (
-                <ContractDetails contract={selectedContract} onClose={() => setIsDetailsDialogOpen(false)} />
+                <ContractDetails
+                  contract={selectedContract}
+                  onClose={() => setIsDetailsDialogOpen(false)}
+                />
               )}
             </DialogContent>
           </Dialog>
         </main>
       </div>
     </div>
-  )
+  );
 }

@@ -57,3 +57,26 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+@layer utilities {
+  .layout-container {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    min-height: 100vh;
+  }
+
+  .sidebar-collapsed {
+    width: 4rem; /* 64px */
+    transition: width 0.3s ease;
+  }
+
+  .sidebar-expanded {
+    width: 16rem; /* 256px */
+    transition: width 0.3s ease;
+  }
+
+  .main-content {
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}

@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/hooks/use-auth";
+import { SidebarProvider } from "@/hooks/use-sidebar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,8 +28,12 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <AuthProvider>
-          <Suspense fallback={null}>{children}</Suspense>
-          <Toaster position="top-right" richColors />
+          <SidebarProvider>
+            <div className="min-h-screen" suppressHydrationWarning={true}>
+              <Suspense fallback={null}>{children}</Suspense>
+            </div>
+            <Toaster position="top-right" richColors />
+          </SidebarProvider>
         </AuthProvider>
         <Analytics />
       </body>

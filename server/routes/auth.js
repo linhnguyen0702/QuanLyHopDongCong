@@ -36,6 +36,9 @@ if (process.env.NODE_ENV === "production") {
 
 // Register
 router.post("/register", validateRegistration, async (req, res) => {
+  console.log("🔍 Registration endpoint hit");
+  console.log("📝 Request body:", req.body);
+
   try {
     const {
       fullName,
@@ -46,7 +49,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       department,
       phone,
     } = req.body;
-    console.log("Registration attempt:", {
+    console.log("✅ Registration attempt:", {
       fullName,
       email,
       company,
@@ -55,7 +58,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       phone,
     });
 
-    // Validate role
+    // Validate role (admin is allowed in database but not in registration form)
     const allowedRoles = ["user", "manager", "approver"];
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({
@@ -85,7 +88,15 @@ router.post("/register", validateRegistration, async (req, res) => {
     console.log("Attempting to insert user into database...");
     const [result] = await pool.execute(
       "INSERT INTO users (full_name, email, password, company, role, department, phone, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
-      [fullName, email, hashedPassword, company, role, department, phone]
+      [
+        fullName,
+        email,
+        hashedPassword,
+        company,
+        role,
+        department || null,
+        phone || null,
+      ]
     );
     console.log("User inserted successfully with ID:", result.insertId);
 
@@ -123,22 +134,26 @@ router.post("/register", validateRegistration, async (req, res) => {
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      token,
-      user: {
-        id: result.insertId,
-        fullName,
-        email,
-        company,
-        role,
-        department,
-        phone,
+      data: {
+        token,
+        user: {
+          id: result.insertId,
+          fullName,
+          email,
+          company,
+          role,
+          department,
+          phone,
+        },
       },
     });
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error("❌ Registration error:", error);
+    console.error("❌ Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      ...(process.env.NODE_ENV !== "production" && { error: error.message }),
     });
   }
 });
@@ -148,9 +163,9 @@ router.post("/login", validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
+    // Find user với đầy đủ thông tin
     const [users] = await pool.execute(
-      "SELECT id, full_name, email, password, company, role FROM users WHERE email = ?",
+      "SELECT id, full_name, email, password, company, role, department, phone, is_active, created_at, updated_at FROM users WHERE email = ?",
       [email]
     );
 
@@ -200,6 +215,11 @@ router.post("/login", validateLogin, async (req, res) => {
           email: user.email,
           company: user.company,
           role: user.role,
+          department: user.department,
+          phone: user.phone,
+          isActive: user.is_active,
+          createdAt: user.created_at ? user.created_at.toISOString() : null,
+          updatedAt: user.updated_at ? user.updated_at.toISOString() : null,
         },
       },
     });

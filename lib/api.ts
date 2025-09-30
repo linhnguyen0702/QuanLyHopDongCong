@@ -12,7 +12,7 @@ export interface ApiResponse<T = any> {
 
 export interface AuthResponse {
   success: boolean;
-  data: {
+  data?: {
     token: string;
     user: {
       id: number;
@@ -23,6 +23,13 @@ export interface AuthResponse {
     };
   };
   message?: string;
+  errors?: Array<{
+    msg?: string;
+    message?: string;
+    param?: string;
+    value?: any;
+    location?: string;
+  }>;
 }
 
 export interface PaginationParams {
@@ -104,7 +111,22 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "API request failed");
+        // Only log non-authentication errors to avoid spam
+        if (response.status !== 401) {
+          console.error("API Error Response:", {
+            status: response.status,
+            statusText: response.statusText,
+            data: data,
+          });
+        }
+
+        // Return the error response instead of throwing, so the calling code can handle it
+        return {
+          success: false,
+          message: data.message || "API request failed",
+          errors: data.errors || [],
+          ...data,
+        };
       }
 
       return data;

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { useSidebar } from "@/hooks/use-sidebar";
 import {
   User,
   Building2,
@@ -28,6 +29,7 @@ import { toast } from "@/hooks/use-toast";
 
 export default function ProfilePage() {
   const { user, updateProfile } = useAuth();
+
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -90,11 +92,11 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="layout-container bg-gray-50">
         <Sidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="main-content">
           <Header />
-          <main className="flex-1 p-6">
+          <main className="p-6">
             <div className="max-w-4xl mx-auto">
               <div className="animate-pulse">
                 <div className="h-8 bg-gray-200 rounded mb-6"></div>
@@ -111,11 +113,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="layout-container bg-gray-50">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="main-content">
         <Header />
-        <main className="flex-1 p-6">
+        <main className="p-6">
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold tracking-tight">
@@ -144,13 +146,14 @@ export default function ProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Cột trái */}
+                  <div className="space-y-6">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
                         <User className="h-6 w-6 text-gray-600" />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm text-gray-500">Họ và tên</p>
                         <p className="font-medium text-lg">
                           {user.fullName || "Chưa có thông tin"}
@@ -162,26 +165,41 @@ export default function ProfilePage() {
                       <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                         <Mail className="h-6 w-6 text-blue-600" />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm text-gray-500">Email</p>
                         <p className="font-medium">{user.email}</p>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                         <Building2 className="h-6 w-6 text-green-600" />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm text-gray-500">Vai trò</p>
                         <p className="font-medium">
                           {user.role === "admin"
                             ? "Quản trị viên"
                             : user.role === "manager"
                             ? "Quản lý"
+                            : user.role === "approver"
+                            ? "Người phê duyệt"
                             : "Nhân viên"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cột phải */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                        <Phone className="h-6 w-6 text-purple-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-500">Số điện thoại</p>
+                        <p className="font-medium">
+                          {user.phone || "Chưa có thông tin"}
                         </p>
                       </div>
                     </div>
@@ -190,7 +208,7 @@ export default function ProfilePage() {
                       <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
                         <Calendar className="h-6 w-6 text-orange-600" />
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm text-gray-500">Ngày tạo</p>
                         <p className="font-medium">
                           {(() => {
@@ -208,6 +226,18 @@ export default function ProfilePage() {
                               return "Lỗi định dạng ngày";
                             }
                           })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
+                        <Building2 className="h-6 w-6 text-slate-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-500">Phòng ban</p>
+                        <p className="font-medium">
+                          {user.department || "Chưa có thông tin"}
                         </p>
                       </div>
                     </div>

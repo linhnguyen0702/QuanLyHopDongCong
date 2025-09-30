@@ -1,13 +1,26 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Sidebar } from "@/components/sidebar"
-import { Header } from "@/components/header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState } from "react";
+import { Sidebar } from "@/components/sidebar";
+import { Header } from "@/components/header";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +28,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +36,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus,
   Search,
@@ -39,9 +52,9 @@ import {
   Phone,
   Mail,
   TrendingUp,
-} from "lucide-react"
-import { ContractorForm } from "@/components/contractor-form"
-import { ContractorDetails } from "@/components/contractor-details"
+} from "lucide-react";
+import { ContractorForm } from "@/components/contractor-form";
+import { ContractorDetails } from "@/components/contractor-details";
 
 // Mock data for contractors
 const contractors = [
@@ -59,7 +72,11 @@ const contractors = [
     establishedDate: "2010-05-15",
     registrationNumber: "0123456789",
     category: "Xây dựng",
-    specialization: ["Xây dựng cầu đường", "Công trình dân dụng", "Hạ tầng kỹ thuật"],
+    specialization: [
+      "Xây dựng cầu đường",
+      "Công trình dân dụng",
+      "Hạ tầng kỹ thuật",
+    ],
     status: "active",
     rating: 4.8,
     totalContracts: 15,
@@ -111,7 +128,11 @@ const contractors = [
     establishedDate: "2015-08-10",
     registrationNumber: "0456789123",
     category: "Xây dựng",
-    specialization: ["Công trình giáo dục", "Nhà ở xã hội", "Công trình công cộng"],
+    specialization: [
+      "Công trình giáo dục",
+      "Nhà ở xã hội",
+      "Công trình công cộng",
+    ],
     status: "active",
     rating: 4.5,
     totalContracts: 6,
@@ -137,7 +158,11 @@ const contractors = [
     establishedDate: "2012-11-25",
     registrationNumber: "0789123456",
     category: "Hạ tầng",
-    specialization: ["Hệ thống cấp nước", "Xử lý nước thải", "Hạ tầng kỹ thuật"],
+    specialization: [
+      "Hệ thống cấp nước",
+      "Xử lý nước thải",
+      "Hạ tầng kỹ thuật",
+    ],
     status: "pending",
     rating: 4.2,
     totalContracts: 4,
@@ -149,66 +174,93 @@ const contractors = [
     bankAccount: "7891234560",
     bankName: "Ngân hàng TMCP Á Châu",
   },
-]
+];
 
 export default function ContractorsPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedContractor, setSelectedContractor] = useState<any>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedContractor, setSelectedContractor] = useState<any>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Hoạt động</Badge>
+        return (
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+            Hoạt động
+          </Badge>
+        );
       case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Chờ duyệt</Badge>
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Chờ duyệt
+          </Badge>
+        );
       case "suspended":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Tạm dừng</Badge>
+        return (
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+            Tạm dừng
+          </Badge>
+        );
       case "blacklisted":
-        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Danh sách đen</Badge>
+        return (
+          <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">
+            Danh sách đen
+          </Badge>
+        );
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  }
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
-    }).format(amount)
-  }
+    }).format(amount);
+  };
 
   const getRatingStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, i) => (
       <Star
         key={i}
-        className={`h-3 w-3 ${i < Math.floor(rating) ? "text-yellow-400 fill-current" : "text-gray-300"}`}
+        className={`h-3 w-3 ${
+          i < Math.floor(rating)
+            ? "text-yellow-400 fill-current"
+            : "text-gray-300"
+        }`}
       />
-    ))
-  }
+    ));
+  };
 
   const filteredContractors = contractors.filter(
     (contractor) =>
       contractor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       contractor.shortName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       contractor.taxCode.includes(searchTerm) ||
-      contractor.category.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      contractor.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="layout-container bg-background">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="main-content">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           {/* Page Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Quản lý Nhà thầu</h1>
-              <p className="text-muted-foreground mt-2">Quản lý thông tin các nhà thầu và đối tác</p>
+              <h1 className="text-3xl font-bold text-foreground">
+                Quản lý Nhà thầu
+              </h1>
+              <p className="text-muted-foreground mt-2">
+                Quản lý thông tin các nhà thầu và đối tác
+              </p>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <Dialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+            >
               <DialogTrigger asChild>
                 <Button className="bg-secondary hover:bg-secondary/90">
                   <Plus className="h-4 w-4 mr-2" />
@@ -218,7 +270,9 @@ export default function ContractorsPage() {
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Thêm nhà thầu mới</DialogTitle>
-                  <DialogDescription>Nhập thông tin chi tiết về nhà thầu mới</DialogDescription>
+                  <DialogDescription>
+                    Nhập thông tin chi tiết về nhà thầu mới
+                  </DialogDescription>
                 </DialogHeader>
                 <ContractorForm onClose={() => setIsCreateDialogOpen(false)} />
               </DialogContent>
@@ -262,7 +316,10 @@ export default function ContractorsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Danh sách nhà thầu</CardTitle>
-                  <CardDescription>Tổng cộng {filteredContractors.length} nhà thầu được tìm thấy</CardDescription>
+                  <CardDescription>
+                    Tổng cộng {filteredContractors.length} nhà thầu được tìm
+                    thấy
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -282,38 +339,56 @@ export default function ContractorsPage() {
                         <TableRow key={contractor.id}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{contractor.shortName}</p>
-                              <p className="text-sm text-muted-foreground">{contractor.taxCode}</p>
+                              <p className="font-medium">
+                                {contractor.shortName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {contractor.taxCode}
+                              </p>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">
                               <div className="flex items-center space-x-1">
                                 <Phone className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-sm">{contractor.phone}</span>
+                                <span className="text-sm">
+                                  {contractor.phone}
+                                </span>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <Mail className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-sm">{contractor.email}</span>
+                                <span className="text-sm">
+                                  {contractor.email}
+                                </span>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{contractor.category}</Badge>
+                            <Badge variant="outline">
+                              {contractor.category}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-1">
                               {getRatingStars(contractor.rating)}
-                              <span className="text-sm ml-1">{contractor.rating}</span>
+                              <span className="text-sm ml-1">
+                                {contractor.rating}
+                              </span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
-                              <p className="font-medium">{contractor.totalContracts} hợp đồng</p>
-                              <p className="text-muted-foreground">{formatCurrency(contractor.totalValue)}</p>
+                              <p className="font-medium">
+                                {contractor.totalContracts} hợp đồng
+                              </p>
+                              <p className="text-muted-foreground">
+                                {formatCurrency(contractor.totalValue)}
+                              </p>
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(contractor.status)}</TableCell>
+                          <TableCell>
+                            {getStatusBadge(contractor.status)}
+                          </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -326,8 +401,8 @@ export default function ContractorsPage() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    setSelectedContractor(contractor)
-                                    setIsDetailsDialogOpen(true)
+                                    setSelectedContractor(contractor);
+                                    setIsDetailsDialogOpen(true);
                                   }}
                                 >
                                   <Eye className="h-4 w-4 mr-2" />
@@ -362,13 +437,22 @@ export default function ContractorsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Nhà thầu hoạt động</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Nhà thầu hoạt động
+                    </CardTitle>
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{contractors.filter((c) => c.status === "active").length}</div>
+                    <div className="text-2xl font-bold">
+                      {contractors.filter((c) => c.status === "active").length}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {Math.round((contractors.filter((c) => c.status === "active").length / contractors.length) * 100)}
+                      {Math.round(
+                        (contractors.filter((c) => c.status === "active")
+                          .length /
+                          contractors.length) *
+                          100
+                      )}
                       % tổng số nhà thầu
                     </p>
                   </CardContent>
@@ -376,45 +460,68 @@ export default function ContractorsPage() {
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Đánh giá trung bình</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Đánh giá trung bình
+                    </CardTitle>
                     <Star className="h-4 w-4 text-yellow-400" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {(contractors.reduce((sum, c) => sum + c.rating, 0) / contractors.length).toFixed(1)}
+                      {(
+                        contractors.reduce((sum, c) => sum + c.rating, 0) /
+                        contractors.length
+                      ).toFixed(1)}
                     </div>
-                    <p className="text-xs text-muted-foreground">Trên thang điểm 5</p>
+                    <p className="text-xs text-muted-foreground">
+                      Trên thang điểm 5
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Tổng giá trị</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Tổng giá trị
+                    </CardTitle>
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {formatCurrency(contractors.reduce((sum, c) => sum + c.totalValue, 0))}
+                      {formatCurrency(
+                        contractors.reduce((sum, c) => sum + c.totalValue, 0)
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground">Tổng giá trị hợp đồng</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tổng giá trị hợp đồng
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Tỷ lệ hoàn thành</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Tỷ lệ hoàn thành
+                    </CardTitle>
                     <TrendingUp className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-green-600">
                       {Math.round(
-                        (contractors.reduce((sum, c) => sum + c.completedContracts, 0) /
-                          contractors.reduce((sum, c) => sum + c.totalContracts, 0)) *
-                          100,
+                        (contractors.reduce(
+                          (sum, c) => sum + c.completedContracts,
+                          0
+                        ) /
+                          contractors.reduce(
+                            (sum, c) => sum + c.totalContracts,
+                            0
+                          )) *
+                          100
                       )}
                       %
                     </div>
-                    <p className="text-xs text-muted-foreground">Hợp đồng hoàn thành</p>
+                    <p className="text-xs text-muted-foreground">
+                      Hợp đồng hoàn thành
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -423,7 +530,9 @@ export default function ContractorsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Nhà thầu xuất sắc</CardTitle>
-                  <CardDescription>Xếp hạng theo đánh giá và hiệu suất</CardDescription>
+                  <CardDescription>
+                    Xếp hạng theo đánh giá và hiệu suất
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -431,23 +540,35 @@ export default function ContractorsPage() {
                       .sort((a, b) => b.rating - a.rating)
                       .slice(0, 5)
                       .map((contractor, index) => (
-                        <div key={contractor.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div
+                          key={contractor.id}
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
                           <div className="flex items-center space-x-4">
                             <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
-                              <span className="text-sm font-bold">{index + 1}</span>
+                              <span className="text-sm font-bold">
+                                {index + 1}
+                              </span>
                             </div>
                             <div>
-                              <p className="font-medium">{contractor.shortName}</p>
-                              <p className="text-sm text-muted-foreground">{contractor.category}</p>
+                              <p className="font-medium">
+                                {contractor.shortName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {contractor.category}
+                              </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="flex items-center space-x-1 mb-1">
                               {getRatingStars(contractor.rating)}
-                              <span className="text-sm ml-1">{contractor.rating}</span>
+                              <span className="text-sm ml-1">
+                                {contractor.rating}
+                              </span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {contractor.completedContracts}/{contractor.totalContracts} hoàn thành
+                              {contractor.completedContracts}/
+                              {contractor.totalContracts} hoàn thành
                             </p>
                           </div>
                         </div>
@@ -466,24 +587,29 @@ export default function ContractorsPage() {
                 <CardContent>
                   <div className="space-y-4">
                     {Object.entries(
-                      contractors.reduce(
-                        (acc, contractor) => {
-                          acc[contractor.category] = (acc[contractor.category] || 0) + 1
-                          return acc
-                        },
-                        {} as Record<string, number>,
-                      ),
+                      contractors.reduce((acc, contractor) => {
+                        acc[contractor.category] =
+                          (acc[contractor.category] || 0) + 1;
+                        return acc;
+                      }, {} as Record<string, number>)
                     ).map(([category, count]) => (
-                      <div key={category} className="flex items-center justify-between">
+                      <div
+                        key={category}
+                        className="flex items-center justify-between"
+                      >
                         <span className="font-medium">{category}</span>
                         <div className="flex items-center space-x-2">
                           <div className="w-32 bg-muted rounded-full h-2">
                             <div
                               className="bg-secondary h-2 rounded-full"
-                              style={{ width: `${(count / contractors.length) * 100}%` }}
+                              style={{
+                                width: `${(count / contractors.length) * 100}%`,
+                              }}
                             />
                           </div>
-                          <span className="text-sm text-muted-foreground">{count}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {count}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -499,20 +625,33 @@ export default function ContractorsPage() {
                 <CardContent>
                   <div className="space-y-3">
                     {contractors
-                      .sort((a, b) => new Date(b.lastContractDate).getTime() - new Date(a.lastContractDate).getTime())
+                      .sort(
+                        (a, b) =>
+                          new Date(b.lastContractDate).getTime() -
+                          new Date(a.lastContractDate).getTime()
+                      )
                       .slice(0, 5)
                       .map((contractor) => (
-                        <div key={contractor.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div
+                          key={contractor.id}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
                           <div className="flex items-center space-x-3">
                             <Building2 className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <p className="font-medium">{contractor.shortName}</p>
-                              <p className="text-sm text-muted-foreground">Hợp đồng gần nhất</p>
+                              <p className="font-medium">
+                                {contractor.shortName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Hợp đồng gần nhất
+                              </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-medium">
-                              {new Date(contractor.lastContractDate).toLocaleDateString("vi-VN")}
+                              {new Date(
+                                contractor.lastContractDate
+                              ).toLocaleDateString("vi-VN")}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {contractor.ongoingContracts} đang thực hiện
@@ -527,19 +666,27 @@ export default function ContractorsPage() {
           </Tabs>
 
           {/* Contractor Details Dialog */}
-          <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <Dialog
+            open={isDetailsDialogOpen}
+            onOpenChange={setIsDetailsDialogOpen}
+          >
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Chi tiết nhà thầu</DialogTitle>
-                <DialogDescription>Thông tin chi tiết và lịch sử hợp đồng</DialogDescription>
+                <DialogDescription>
+                  Thông tin chi tiết và lịch sử hợp đồng
+                </DialogDescription>
               </DialogHeader>
               {selectedContractor && (
-                <ContractorDetails contractor={selectedContractor} onClose={() => setIsDetailsDialogOpen(false)} />
+                <ContractorDetails
+                  contractor={selectedContractor}
+                  onClose={() => setIsDetailsDialogOpen(false)}
+                />
               )}
             </DialogContent>
           </Dialog>
         </main>
       </div>
     </div>
-  )
+  );
 }

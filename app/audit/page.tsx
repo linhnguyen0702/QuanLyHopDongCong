@@ -1,16 +1,32 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Sidebar } from "@/components/sidebar"
-import { Header } from "@/components/header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState } from "react";
+import { Sidebar } from "@/components/sidebar";
+import { Header } from "@/components/header";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Search,
   Download,
@@ -24,10 +40,10 @@ import {
   Edit,
   Trash2,
   Plus,
-} from "lucide-react"
-import { format } from "date-fns"
-import { vi } from "date-fns/locale"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 // Mock audit data
 const auditLogs = [
@@ -116,83 +132,112 @@ const auditLogs = [
     status: "BLOCKED",
     severity: "ERROR",
   },
-]
+];
 
 export default function AuditPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedAction, setSelectedAction] = useState("all")
-  const [selectedSeverity, setSelectedSeverity] = useState("all")
-  const [dateFrom, setDateFrom] = useState<Date>()
-  const [dateTo, setDateTo] = useState<Date>()
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedAction, setSelectedAction] = useState("all");
+  const [selectedSeverity, setSelectedSeverity] = useState("all");
+  const [dateFrom, setDateFrom] = useState<Date>();
+  const [dateTo, setDateTo] = useState<Date>();
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case "INFO":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Thông tin</Badge>
+        return (
+          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+            Thông tin
+          </Badge>
+        );
       case "WARNING":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Cảnh báo</Badge>
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Cảnh báo
+          </Badge>
+        );
       case "ERROR":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Lỗi</Badge>
+        return (
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+            Lỗi
+          </Badge>
+        );
       default:
-        return <Badge variant="secondary">{severity}</Badge>
+        return <Badge variant="secondary">{severity}</Badge>;
     }
-  }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "SUCCESS":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Thành công</Badge>
+        return (
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+            Thành công
+          </Badge>
+        );
       case "FAILED":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Thất bại</Badge>
+        return (
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+            Thất bại
+          </Badge>
+        );
       case "BLOCKED":
-        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Bị chặn</Badge>
+        return (
+          <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">
+            Bị chặn
+          </Badge>
+        );
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  }
+  };
 
   const getActionIcon = (action: string) => {
     switch (action) {
       case "CREATE_CONTRACT":
-        return <Plus className="h-4 w-4" />
+        return <Plus className="h-4 w-4" />;
       case "UPDATE_PROGRESS":
-        return <Edit className="h-4 w-4" />
+        return <Edit className="h-4 w-4" />;
       case "APPROVE_CONTRACT":
-        return <CheckCircle className="h-4 w-4" />
+        return <CheckCircle className="h-4 w-4" />;
       case "DELETE_ATTEMPT":
-        return <Trash2 className="h-4 w-4" />
+        return <Trash2 className="h-4 w-4" />;
       case "LOGIN_FAILED":
-        return <AlertTriangle className="h-4 w-4" />
+        return <AlertTriangle className="h-4 w-4" />;
       default:
-        return <FileText className="h-4 w-4" />
+        return <FileText className="h-4 w-4" />;
     }
-  }
+  };
 
   const filteredLogs = auditLogs.filter((log) => {
     const matchesSearch =
       log.actionText.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.entityId.toLowerCase().includes(searchTerm.toLowerCase())
+      log.entityId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesAction = selectedAction === "all" || log.action === selectedAction
-    const matchesSeverity = selectedSeverity === "all" || log.severity === selectedSeverity
+    const matchesAction =
+      selectedAction === "all" || log.action === selectedAction;
+    const matchesSeverity =
+      selectedSeverity === "all" || log.severity === selectedSeverity;
 
-    return matchesSearch && matchesAction && matchesSeverity
-  })
+    return matchesSearch && matchesAction && matchesSeverity;
+  });
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="layout-container bg-background">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="main-content">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 p-6">
           {/* Page Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Audit Trail</h1>
+              <h1 className="text-3xl font-bold text-foreground">
+                Audit Trail
+              </h1>
               <p className="text-muted-foreground mt-2">
-                Theo dõi tất cả hoạt động và thay đổi trong hệ thống với xác thực blockchain
+                Theo dõi tất cả hoạt động và thay đổi trong hệ thống với xác
+                thực blockchain
               </p>
             </div>
             <Button variant="outline">
@@ -223,20 +268,34 @@ export default function AuditPage() {
                       />
                     </div>
 
-                    <Select value={selectedAction} onValueChange={setSelectedAction}>
+                    <Select
+                      value={selectedAction}
+                      onValueChange={setSelectedAction}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Loại hoạt động" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Tất cả hoạt động</SelectItem>
-                        <SelectItem value="CREATE_CONTRACT">Tạo hợp đồng</SelectItem>
-                        <SelectItem value="UPDATE_PROGRESS">Cập nhật tiến độ</SelectItem>
-                        <SelectItem value="APPROVE_CONTRACT">Phê duyệt</SelectItem>
-                        <SelectItem value="LOGIN_FAILED">Đăng nhập thất bại</SelectItem>
+                        <SelectItem value="CREATE_CONTRACT">
+                          Tạo hợp đồng
+                        </SelectItem>
+                        <SelectItem value="UPDATE_PROGRESS">
+                          Cập nhật tiến độ
+                        </SelectItem>
+                        <SelectItem value="APPROVE_CONTRACT">
+                          Phê duyệt
+                        </SelectItem>
+                        <SelectItem value="LOGIN_FAILED">
+                          Đăng nhập thất bại
+                        </SelectItem>
                       </SelectContent>
                     </Select>
 
-                    <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+                    <Select
+                      value={selectedSeverity}
+                      onValueChange={setSelectedSeverity}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Mức độ" />
                       </SelectTrigger>
@@ -252,14 +311,24 @@ export default function AuditPage() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className={cn("justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
+                          className={cn(
+                            "justify-start text-left font-normal",
+                            !dateFrom && "text-muted-foreground"
+                          )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {dateFrom ? format(dateFrom, "dd/MM/yyyy", { locale: vi }) : "Từ ngày"}
+                          {dateFrom
+                            ? format(dateFrom, "dd/MM/yyyy", { locale: vi })
+                            : "Từ ngày"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
+                        <Calendar
+                          mode="single"
+                          selected={dateFrom}
+                          onSelect={setDateFrom}
+                          initialFocus
+                        />
                       </PopoverContent>
                     </Popover>
 
@@ -267,14 +336,24 @@ export default function AuditPage() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
-                          className={cn("justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
+                          className={cn(
+                            "justify-start text-left font-normal",
+                            !dateTo && "text-muted-foreground"
+                          )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {dateTo ? format(dateTo, "dd/MM/yyyy", { locale: vi }) : "Đến ngày"}
+                          {dateTo
+                            ? format(dateTo, "dd/MM/yyyy", { locale: vi })
+                            : "Đến ngày"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
+                        <Calendar
+                          mode="single"
+                          selected={dateTo}
+                          onSelect={setDateTo}
+                          initialFocus
+                        />
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -285,13 +364,20 @@ export default function AuditPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Nhật ký hoạt động</CardTitle>
-                  <CardDescription>Tổng cộng {filteredLogs.length} bản ghi được tìm thấy</CardDescription>
+                  <CardDescription>
+                    Tổng cộng {filteredLogs.length} bản ghi được tìm thấy
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {filteredLogs.map((log) => (
-                      <div key={log.id} className="flex items-start space-x-4 p-4 border rounded-lg hover:bg-muted/50">
-                        <div className="flex-shrink-0 mt-1">{getActionIcon(log.action)}</div>
+                      <div
+                        key={log.id}
+                        className="flex items-start space-x-4 p-4 border rounded-lg hover:bg-muted/50"
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          {getActionIcon(log.action)}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center space-x-2">
@@ -307,20 +393,26 @@ export default function AuditPage() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div>
-                              <p className="text-muted-foreground">Người thực hiện:</p>
+                              <p className="text-muted-foreground">
+                                Người thực hiện:
+                              </p>
                               <p className="font-medium">
                                 {log.user} ({log.userRole})
                               </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">Đối tượng:</p>
+                              <p className="text-muted-foreground">
+                                Đối tượng:
+                              </p>
                               <p className="font-medium">
                                 {log.entityName} ({log.entityId})
                               </p>
                             </div>
                           </div>
 
-                          <p className="text-sm text-muted-foreground mt-2">{log.details}</p>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            {log.details}
+                          </p>
 
                           <div className="flex items-center justify-between mt-3 pt-3 border-t">
                             <div className="flex items-center space-x-4 text-xs text-muted-foreground">
@@ -331,7 +423,9 @@ export default function AuditPage() {
                             {log.blockchainHash && (
                               <div className="flex items-center space-x-1">
                                 <Shield className="h-3 w-3 text-green-600" />
-                                <span className="text-xs text-green-600 font-mono">{log.blockchainHash}</span>
+                                <span className="text-xs text-green-600 font-mono">
+                                  {log.blockchainHash}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -350,19 +444,28 @@ export default function AuditPage() {
                     <Shield className="h-5 w-5 mr-2" />
                     Blockchain Records
                   </CardTitle>
-                  <CardDescription>Tất cả giao dịch được xác thực trên Hyperledger Fabric</CardDescription>
+                  <CardDescription>
+                    Tất cả giao dịch được xác thực trên Hyperledger Fabric
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {filteredLogs
                       .filter((log) => log.blockchainHash)
                       .map((log) => (
-                        <div key={log.id} className="p-4 border border-green-200 rounded-lg bg-green-50">
+                        <div
+                          key={log.id}
+                          className="p-4 border border-green-200 rounded-lg bg-green-50"
+                        >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center space-x-2">
                               <Shield className="h-4 w-4 text-green-600" />
-                              <span className="font-medium">{log.actionText}</span>
-                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Đã xác thực</Badge>
+                              <span className="font-medium">
+                                {log.actionText}
+                              </span>
+                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                                Đã xác thực
+                              </Badge>
                             </div>
                             <span className="text-sm text-muted-foreground">
                               {new Date(log.timestamp).toLocaleString("vi-VN")}
@@ -371,11 +474,17 @@ export default function AuditPage() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-3">
                             <div>
-                              <p className="text-muted-foreground">Block Hash:</p>
-                              <p className="font-mono text-xs break-all">{log.blockchainHash}</p>
+                              <p className="text-muted-foreground">
+                                Block Hash:
+                              </p>
+                              <p className="font-mono text-xs break-all">
+                                {log.blockchainHash}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">Transaction ID:</p>
+                              <p className="text-muted-foreground">
+                                Transaction ID:
+                              </p>
                               <p className="font-mono text-xs">{log.id}</p>
                             </div>
                           </div>
@@ -396,27 +505,39 @@ export default function AuditPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Tổng hoạt động</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Tổng hoạt động
+                    </CardTitle>
                     <FileText className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{auditLogs.length}</div>
-                    <p className="text-xs text-muted-foreground">Trong 30 ngày qua</p>
+                    <p className="text-xs text-muted-foreground">
+                      Trong 30 ngày qua
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Thành công</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Thành công
+                    </CardTitle>
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-green-600">
-                      {auditLogs.filter((log) => log.status === "SUCCESS").length}
+                      {
+                        auditLogs.filter((log) => log.status === "SUCCESS")
+                          .length
+                      }
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {Math.round(
-                        (auditLogs.filter((log) => log.status === "SUCCESS").length / auditLogs.length) * 100,
+                        (auditLogs.filter((log) => log.status === "SUCCESS")
+                          .length /
+                          auditLogs.length) *
+                          100
                       )}
                       % tỷ lệ thành công
                     </p>
@@ -425,12 +546,20 @@ export default function AuditPage() {
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Cảnh báo</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Cảnh báo
+                    </CardTitle>
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-yellow-600">
-                      {auditLogs.filter((log) => log.severity === "WARNING" || log.severity === "ERROR").length}
+                      {
+                        auditLogs.filter(
+                          (log) =>
+                            log.severity === "WARNING" ||
+                            log.severity === "ERROR"
+                        ).length
+                      }
                     </div>
                     <p className="text-xs text-muted-foreground">Cần xem xét</p>
                   </CardContent>
@@ -438,14 +567,18 @@ export default function AuditPage() {
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Blockchain</CardTitle>
+                    <CardTitle className="text-sm font-medium">
+                      Blockchain
+                    </CardTitle>
                     <Shield className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-green-600">
                       {auditLogs.filter((log) => log.blockchainHash).length}
                     </div>
-                    <p className="text-xs text-muted-foreground">Giao dịch đã xác thực</p>
+                    <p className="text-xs text-muted-foreground">
+                      Giao dịch đã xác thực
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -458,17 +591,17 @@ export default function AuditPage() {
                 <CardContent>
                   <div className="space-y-3">
                     {Object.entries(
-                      auditLogs.reduce(
-                        (acc, log) => {
-                          acc[log.user] = (acc[log.user] || 0) + 1
-                          return acc
-                        },
-                        {} as Record<string, number>,
-                      ),
+                      auditLogs.reduce((acc, log) => {
+                        acc[log.user] = (acc[log.user] || 0) + 1;
+                        return acc;
+                      }, {} as Record<string, number>)
                     )
                       .sort(([, a], [, b]) => b - a)
                       .map(([user, count]) => (
-                        <div key={user} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div
+                          key={user}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
                           <div className="flex items-center space-x-3">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <span className="font-medium">{user}</span>
@@ -484,5 +617,5 @@ export default function AuditPage() {
         </main>
       </div>
     </div>
-  )
+  );
 }

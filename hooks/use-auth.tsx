@@ -64,7 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       // Only run on client side
-      if (typeof window === "undefined") return;
+      if (typeof window === "undefined") {
+        setLoading(false);
+        return;
+      }
 
       const token = getAuthToken();
       if (!token) {
@@ -77,10 +80,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.success && response.data) {
           setUser(response.data as User);
         } else {
+          // Only log error if it's not an authentication issue
+          if (response.message && !response.message.includes("token")) {
+            console.error("Auth check failed:", response.message);
+          }
           removeAuthToken();
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
+        // Only log unexpected errors, not auth failures
+        if (error instanceof Error && !error.message.includes("token")) {
+          console.error("Auth check failed:", error);
+        }
         removeAuthToken();
       } finally {
         setLoading(false);
@@ -118,15 +128,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const response = (await authApi.register(userData)) as AuthResponse;
+
+      console.log("Registration response:", response); // Debug log
+
       if (response.success && response.data) {
         setAuthToken(response.data.token);
         setUser(response.data.user);
         router.push("/");
       } else {
+        // Handle validation errors specifically
+        if (response.errors && Array.isArray(response.errors)) {
+          const errorMessages = response.errors
+            .map((err) => err.msg || err.message)
+            .join(", ");
+          throw new Error(errorMessages);
+        }
         throw new Error(response.message || "Registration failed");
       }
     } catch (error) {
       console.error("Registration error:", error);
+
+      // Handle network/server errors
+      if (error instanceof Error && error.message.includes("fetch")) {
+        throw new Error(
+          "Unable to connect to server. Please check if the server is running."
+        );
+      }
+
       throw error;
     }
   };
