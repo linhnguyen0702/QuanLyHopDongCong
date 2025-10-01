@@ -1,21 +1,33 @@
-// Global type declarations for the project
+// Global type declarations
+import NextAuth from "next-auth";
 
-declare module "*.css" {
-  const content: any;
-  export default content;
-}
+// NextAuth type declarations
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      company?: string;
+      role?: string;
+      department?: string | null;
+      phone?: string | null;
+      createdAt?: string;
+      isRegistered?: boolean;
+    };
+  }
 
-declare module "*.scss" {
-  const content: any;
-  export default content;
-}
-
-declare module "*.sass" {
-  const content: any;
-  export default content;
-}
-
-declare module "*.less" {
-  const content: any;
-  export default content;
+  interface User {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+    company?: string;
+    role?: string;
+    department?: string | null;
+    phone?: string | null;
+    createdAt?: string;
+    isRegistered?: boolean;
+  }
 }

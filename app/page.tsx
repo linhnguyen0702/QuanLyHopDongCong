@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth-guard";
+
 import {
   Card,
   CardContent,
@@ -74,7 +75,7 @@ export default function Dashboard() {
                 </p>
               </div>
               <Button
-                className="bg-secondary hover:bg-secondary/90"
+                className="bg-[#7C3AED] hover:bg-[#7C3AED]/90"
                 onClick={handleCreateContract}
               >
                 <Plus className="h-4 w-4 mr-2" />

@@ -262,7 +262,7 @@ export default function ContractorsPage() {
               onOpenChange={setIsCreateDialogOpen}
             >
               <DialogTrigger asChild>
-                <Button className="bg-secondary hover:bg-secondary/90">
+                <Button className="bg-[#7C3AED] hover:bg-[#7C3AED]/90">
                   <Plus className="h-4 w-4 mr-2" />
                   Thêm nhà thầu
                 </Button>

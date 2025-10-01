@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { SessionProvider } from "@/components/session-provider";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SidebarProvider } from "@/hooks/use-sidebar";
 import "./globals.css";
@@ -27,14 +28,16 @@ export default function RootLayout({
         className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}
         suppressHydrationWarning={true}
       >
-        <AuthProvider>
-          <SidebarProvider>
-            <div className="min-h-screen" suppressHydrationWarning={true}>
-              <Suspense fallback={null}>{children}</Suspense>
-            </div>
-            <Toaster position="top-right" richColors />
-          </SidebarProvider>
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <SidebarProvider>
+              <div className="min-h-screen" suppressHydrationWarning={true}>
+                <Suspense fallback={null}>{children}</Suspense>
+              </div>
+              <Toaster position="top-right" richColors />
+            </SidebarProvider>
+          </AuthProvider>
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

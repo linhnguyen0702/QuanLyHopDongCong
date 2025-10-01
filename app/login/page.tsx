@@ -19,6 +19,7 @@ import { Eye, EyeOff, Building2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/auth-guard";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +30,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
 
-  // Load saved credentials on component mount
+  // Load saved credentials and check for errors on component mount
   useEffect(() => {
     const savedEmail = localStorage.getItem("remembered_email");
     const savedPassword = localStorage.getItem("remembered_password");
@@ -40,6 +41,24 @@ export default function LoginPage() {
     }
     if (savedPassword) {
       setPassword(savedPassword);
+    }
+
+    // Check for NextAuth errors in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const error = urlParams.get("error");
+
+    if (error === "EmailNotRegistered") {
+      toast.error("❌ Email này chưa được đăng ký trong hệ thống!", {
+        description:
+          "Bạn cần đăng ký tài khoản trước khi có thể đăng nhập bằng Google. Vui lòng liên hệ quản trị viên hoặc sử dụng tính năng đăng ký.",
+        duration: 6000,
+      });
+      setError(
+        "Email chưa được đăng ký - Vui lòng đăng ký trước khi đăng nhập Google"
+      );
+    } else if (error === "SystemError") {
+      toast.error("Có lỗi xảy ra trong hệ thống. Vui lòng thử lại sau.");
+      setError("Lỗi hệ thống");
     }
   }, []);
 
@@ -73,8 +92,19 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    toast.info("Tính năng đăng nhập Google sẽ được cập nhật sớm");
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true);
+      toast.dismiss();
+      await signIn("google", {
+        callbackUrl: "/",
+        redirect: true,
+      });
+    } catch (error: any) {
+      toast.error("Lỗi đăng nhập Google: " + error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Clear error when user starts typing
@@ -251,6 +281,16 @@ export default function LoginPage() {
                 </svg>
                 Đăng nhập với Google
               </Button>
+
+              {/* Google Login Info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-700 text-center">
+                  <strong>Lưu ý:</strong> Chỉ các email đã được đăng ký trong hệ
+                  thống mới có thể đăng nhập bằng Google. Nếu chưa có tài khoản,
+                  vui lòng đăng ký trước.
+                </p>
+              </div>
+
               <div className="text-center text-sm text-gray-600">
                 Chưa có tài khoản?{" "}
                 <Link

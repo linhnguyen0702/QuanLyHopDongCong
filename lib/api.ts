@@ -111,13 +111,17 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
-        // Only log non-authentication errors to avoid spam
-        if (response.status !== 401) {
+        // Only log non-authentication errors and non-404 to avoid spam
+        if (response.status !== 401 && response.status !== 404) {
           console.error("API Error Response:", {
+            url: `${this.baseURL}${endpoint}`,
             status: response.status,
             statusText: response.statusText,
             data: data,
+            method: options.method || "GET",
           });
+        } else if (response.status === 404) {
+          console.warn("API Route not found:", `${this.baseURL}${endpoint}`);
         }
 
         // Return the error response instead of throwing, so the calling code can handle it
@@ -215,6 +219,8 @@ export const authApi = {
   logout: () => apiClient.post("/auth/logout"),
 
   verifyToken: () => apiClient.get("/auth/verify"),
+
+  checkEmail: (email: string) => apiClient.post("/auth/check-email", { email }),
 };
 
 // Contracts API

@@ -24,14 +24,18 @@ import {
   Edit,
   Save,
   X,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 export default function ProfilePage() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, loading } = useAuth();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [showLoadingBanner, setShowLoadingBanner] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     company: "",
@@ -40,43 +44,75 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
+    console.log("📊 Profile page - User state changed:", user);
     if (user) {
-      setFormData({
+      const newFormData = {
         fullName: user.fullName || "",
         company: user.company || "",
         department: user.department || "",
         phone: user.phone || "",
-      });
+      };
+
+      // Only update if data actually changed to avoid unnecessary re-renders
+      if (JSON.stringify(formData) !== JSON.stringify(newFormData)) {
+        setFormData(newFormData);
+        console.log("📊 FormData updated with new user data:", newFormData);
+      }
     }
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setShowLoadingBanner(true);
+    setShowSuccessBanner(false); // Ẩn banner thành công cũ nếu có
+
+    // Thông báo bắt đầu lưu
+    toast({
+      title: "Đang lưu...",
+      description: "Đang cập nhật thông tin cá nhân của bạn",
+    });
 
     try {
       const result = await updateProfile(formData);
       if (result.success) {
+        // Ẩn loading banner và hiển thị success banner
+        setShowLoadingBanner(false);
+        setShowSuccessBanner(true);
+
+        // Thông báo toast thành công
         toast({
-          title: "Thành công",
-          description: "Cập nhật thông tin thành công",
+          title: "✅ Cập nhật thành công!",
+          description: "Thông tin cá nhân của bạn đã được cập nhật và lưu trữ",
+          className: "border-green-200 bg-green-50 text-green-800",
+          duration: 5000,
         });
+
         setIsEditing(false);
+        console.log("📊 Profile update successful");
+
+        // Tự động ẩn banner sau 10 giây
+        setTimeout(() => {
+          setShowSuccessBanner(false);
+        }, 5000);
       } else {
         toast({
-          title: "Lỗi",
-          description: result.error || "Cập nhật thông tin thất bại",
+          title: "❌ Cập nhật thất bại",
+          description:
+            result.error || "Không thể cập nhật thông tin. Vui lòng thử lại.",
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
-        title: "Lỗi",
-        description: "Có lỗi xảy ra khi cập nhật thông tin",
+        title: "❌ Lỗi hệ thống",
+        description:
+          "Có lỗi xảy ra khi kết nối với máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
+      setShowLoadingBanner(false);
     }
   };
 
@@ -88,9 +124,16 @@ export default function ProfilePage() {
       phone: user?.phone || "",
     });
     setIsEditing(false);
+
+    // Thông báo hủy chỉnh sửa
+    toast({
+      title: "📝 Đã hủy chỉnh sửa",
+      description: "Các thay đổi của bạn đã được hoàn tác",
+      className: "border-orange-200 bg-orange-50 text-orange-800",
+    });
   };
 
-  if (!user) {
+  if (loading || !user) {
     return (
       <div className="layout-container bg-gray-50">
         <Sidebar />
@@ -113,19 +156,27 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="layout-container bg-gray-50">
+    <div className="layout-container bg-gray-50" suppressHydrationWarning>
       <Sidebar />
       <div className="main-content">
         <Header />
         <main className="p-6">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-4xl mx-auto space-y-6" suppressHydrationWarning>
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold tracking-tight">
                 Thông tin cá nhân
               </h1>
               {!isEditing && (
                 <Button
-                  onClick={() => setIsEditing(true)}
+                  onClick={() => {
+                    setIsEditing(true);
+                    toast({
+                      title: "✏️ Chế độ chỉnh sửa",
+                      description:
+                        "Bạn có thể chỉnh sửa thông tin cá nhân. Nhớ nhấn 'Lưu thay đổi' khi hoàn tất.",
+                      className: "border-blue-200 bg-blue-50 text-blue-800",
+                    });
+                  }}
                   className="flex items-center gap-2"
                 >
                   <Edit className="h-4 w-4" />
@@ -133,6 +184,55 @@ export default function ProfilePage() {
                 </Button>
               )}
             </div>
+
+            {/* Loading Banner */}
+            {showLoadingBanner && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 shadow-sm animate-in slide-in-from-top duration-300">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-800">
+                      Đang lưu thông tin...
+                    </h3>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Vui lòng chờ trong giây lát, hệ thống đang cập nhật thông
+                      tin của bạn.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Success Banner */}
+            {showSuccessBanner && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 shadow-sm animate-in slide-in-from-top duration-300">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-green-800">
+                        Cập nhật thành công!
+                      </h3>
+                      <p className="text-sm text-green-700 mt-1">
+                        Thông tin cá nhân của bạn đã được lưu và cập nhật thành
+                        công. Các thay đổi sẽ có hiệu lực ngay lập tức.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowSuccessBanner(false)}
+                    className="flex-shrink-0 text-green-600 hover:text-green-800 transition-colors"
+                    aria-label="Đóng thông báo"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* User Overview Card */}
             <Card className="overflow-hidden">
@@ -276,7 +376,9 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="p-3 bg-gray-50 border rounded-md">
-                          {user.fullName || "Chưa có thông tin"}
+                          {formData.fullName ||
+                            user.fullName ||
+                            "Chưa có thông tin"}
                         </div>
                       )}
                     </div>
@@ -297,7 +399,9 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="p-3 bg-gray-50 border rounded-md">
-                          {user.company || "Chưa có thông tin"}
+                          {formData.company ||
+                            user.company ||
+                            "Chưa có thông tin"}
                         </div>
                       )}
                     </div>
@@ -318,7 +422,9 @@ export default function ProfilePage() {
                         />
                       ) : (
                         <div className="p-3 bg-gray-50 border rounded-md">
-                          {user.department || "Chưa có thông tin"}
+                          {formData.department ||
+                            user.department ||
+                            "Chưa có thông tin"}
                         </div>
                       )}
                     </div>
@@ -337,7 +443,7 @@ export default function ProfilePage() {
                       ) : (
                         <div className="p-3 bg-gray-50 border rounded-md flex items-center gap-2">
                           <Phone className="h-4 w-4 text-gray-400" />
-                          {user.phone || "Chưa có thông tin"}
+                          {formData.phone || user.phone || "Chưa có thông tin"}
                         </div>
                       )}
                     </div>

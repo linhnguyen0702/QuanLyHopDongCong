@@ -437,4 +437,135 @@ router.get("/verify", authenticateToken, (req, res) => {
   });
 });
 
+// Check if email exists in system (for Google OAuth validation)
+router.post("/check-email", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // Check if user exists in database
+    const [users] = await pool.execute(
+      "SELECT id, full_name, email, company, role, department, phone, is_active, created_at FROM users WHERE email = ? AND is_active = 1",
+      [email]
+    );
+
+    if (users.length > 0) {
+      const user = users[0];
+      return res.json({
+        success: true,
+        message: "Email exists in system",
+        data: {
+          id: user.id,
+          fullName: user.full_name,
+          email: user.email,
+          company: user.company,
+          role: user.role,
+          department: user.department,
+          phone: user.phone,
+          isActive: user.is_active,
+          createdAt: user.created_at,
+        },
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: "Email chưa được đăng ký trong hệ thống",
+      });
+    }
+  } catch (error) {
+    console.error("Check email error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Update profile for Google OAuth users (no token required)
+router.put("/profile-update-google", async (req, res) => {
+  try {
+    const { email, fullName, company, department, phone } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // First check if user exists
+    const [existingUsers] = await pool.execute(
+      "SELECT id FROM users WHERE email = ? AND is_active = 1",
+      [email]
+    );
+
+    if (existingUsers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const userId = existingUsers[0].id;
+
+    // Update user profile
+    await pool.execute(
+      "UPDATE users SET full_name = ?, company = ?, department = ?, phone = ?, updated_at = NOW() WHERE id = ?",
+      [fullName, company, department, phone, userId]
+    );
+
+    // Get updated user data
+    const [updatedUsers] = await pool.execute(
+      "SELECT id, full_name, email, company, role, department, phone, is_active, created_at, updated_at FROM users WHERE id = ?",
+      [userId]
+    );
+
+    const user = updatedUsers[0];
+
+    // Log audit trail
+    await pool.execute(
+      "INSERT INTO audit_logs (table_name, record_id, action, old_values, new_values, user_id, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+      [
+        "users",
+        userId,
+        "UPDATE",
+        JSON.stringify({ profile_update: "via_google_oauth" }),
+        JSON.stringify({ fullName, company, department, phone }),
+        userId,
+        req.ip,
+        req.get("User-Agent") || "",
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: user.id,
+        fullName: user.full_name,
+        email: user.email,
+        company: user.company,
+        role: user.role,
+        department: user.department,
+        phone: user.phone,
+        isActive: user.is_active,
+        createdAt: user.created_at ? user.created_at.toISOString() : null,
+        updatedAt: user.updated_at ? user.updated_at.toISOString() : null,
+      },
+    });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 module.exports = router;
