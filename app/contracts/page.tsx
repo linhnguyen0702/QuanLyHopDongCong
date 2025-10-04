@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -104,6 +106,7 @@ const contracts = [
 ];
 
 export default function ContractsPage() {
+  const { collapsed } = useSidebar();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -153,7 +156,7 @@ export default function ContractsPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}

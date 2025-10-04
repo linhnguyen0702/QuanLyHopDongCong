@@ -6,6 +6,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -38,6 +40,7 @@ import {
 
 export default function NewContractorPage() {
   const router = useRouter();
+  const { collapsed } = useSidebar();
   const [certificates, setCertificates] = useState<string[]>([]);
   const [specializations, setSpecializations] = useState<string[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
@@ -88,7 +91,7 @@ export default function NewContractorPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}

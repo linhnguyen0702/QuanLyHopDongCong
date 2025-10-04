@@ -60,23 +60,71 @@
 
 @layer utilities {
   .layout-container {
-    display: grid;
-    grid-template-columns: auto 1fr;
     min-height: 100vh;
+    position: relative;
   }
 
   .sidebar-collapsed {
     width: 4rem; /* 64px */
     transition: width 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    height: 100vh;
   }
 
   .sidebar-expanded {
     width: 16rem; /* 256px */
     transition: width 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    height: 100vh;
   }
 
   .main-content {
     min-height: 100vh;
     overflow-x: hidden;
+    margin-left: 16rem; /* 256px - width của sidebar expanded */
+    transition: margin-left 0.3s ease;
+    width: calc(100vw - 16rem);
+  }
+
+  .main-content.sidebar-collapsed {
+    margin-left: 4rem; /* 64px - width của sidebar collapsed */
+    width: calc(100vw - 4rem);
+  }
+
+  /* Responsive design cho mobile */
+  @media (max-width: 768px) {
+    .sidebar-expanded {
+      width: 16rem;
+      transform: translateX(-100%);
+    }
+
+    .sidebar-expanded.mobile-open {
+      transform: translateX(0);
+    }
+
+    .sidebar-collapsed {
+      transform: translateX(-100%);
+    }
+
+    .sidebar-collapsed.mobile-open {
+      transform: translateX(0);
+      width: 16rem;
+    }
+
+    .main-content {
+      margin-left: 0;
+      width: 100vw;
+    }
+
+    .main-content.sidebar-collapsed {
+      margin-left: 0;
+      width: 100vw;
+    }
   }
 }

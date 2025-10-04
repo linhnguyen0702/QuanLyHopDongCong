@@ -51,7 +51,7 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        "flex flex-col h-screen bg-white border-r border-gray-200 shadow-sm",
+        "flex flex-col bg-white border-r border-gray-200 shadow-sm",
         collapsed ? "sidebar-collapsed" : "sidebar-expanded"
       )}
     >
@@ -93,32 +93,40 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-2">
-          {navigation.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.name} href={item.href}>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "w-full justify-start text-left transition-all duration-200",
-                    collapsed ? "px-2" : "px-3",
-                    isActive
-                      ? "bg-violet-600 text-white font-medium"
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900 hover:scale-105"
-                  )}
-                >
-                  <item.icon
+          {navigation
+            .filter((item) => {
+              // Chỉ hiển thị trang Users cho admin
+              if (item.href === "/users") {
+                return user?.role === "admin";
+              }
+              return true;
+            })
+            .map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link key={item.name} href={item.href}>
+                  <Button
+                    variant="ghost"
                     className={cn(
-                      "h-4 w-4 transition-colors",
-                      collapsed ? "mr-0" : "mr-3",
-                      isActive ? "text-white" : ""
+                      "w-full justify-start text-left transition-all duration-200",
+                      collapsed ? "px-2" : "px-3",
+                      isActive
+                        ? "bg-violet-600 text-white font-medium"
+                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900 hover:scale-105"
                     )}
-                  />
-                  {!collapsed && <span>{item.name}</span>}
-                </Button>
-              </Link>
-            );
-          })}
+                  >
+                    <item.icon
+                      className={cn(
+                        "h-4 w-4 transition-colors",
+                        collapsed ? "mr-0" : "mr-3",
+                        isActive ? "text-white" : ""
+                      )}
+                    />
+                    {!collapsed && <span>{item.name}</span>}
+                  </Button>
+                </Link>
+              );
+            })}
         </nav>
       </ScrollArea>
 

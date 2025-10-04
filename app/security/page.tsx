@@ -2,6 +2,8 @@
 
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react";
 
 export default function SecurityPage() {
+  const { collapsed } = useSidebar();
   const mockTransactionData = {
     id: "security-audit-001",
     type: "SECURITY_AUDIT",
@@ -39,7 +42,7 @@ export default function SecurityPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -49,6 +51,7 @@ import {
 } from "lucide-react";
 
 export default function SettingsPage() {
+  const { collapsed } = useSidebar();
   const [notifications, setNotifications] = useState({
     email: true,
     sms: false,
@@ -106,7 +109,7 @@ export default function SettingsPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}

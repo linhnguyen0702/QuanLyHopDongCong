@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
 import {
   Card,
   CardContent,
@@ -135,6 +136,7 @@ const auditLogs = [
 ];
 
 export default function AuditPage() {
+  const { collapsed } = useSidebar();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAction, setSelectedAction] = useState("all");
   const [selectedSeverity, setSelectedSeverity] = useState("all");
@@ -226,7 +228,7 @@ export default function AuditPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="flex-1 p-6">
           {/* Page Header */}

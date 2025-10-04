@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -14,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { useSidebar } from "@/hooks/use-sidebar";
 import {
   User,
   Building2,
@@ -31,6 +32,7 @@ import { toast } from "@/hooks/use-toast";
 
 export default function ProfilePage() {
   const { user, updateProfile, loading } = useAuth();
+  const { collapsed } = useSidebar();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -137,7 +139,7 @@ export default function ProfilePage() {
     return (
       <div className="layout-container bg-gray-50">
         <Sidebar />
-        <div className="main-content">
+        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
           <Header />
           <main className="p-6">
             <div className="max-w-4xl mx-auto">
@@ -158,7 +160,7 @@ export default function ProfilePage() {
   return (
     <div className="layout-container bg-gray-50" suppressHydrationWarning>
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           <div className="max-w-4xl mx-auto space-y-6" suppressHydrationWarning>

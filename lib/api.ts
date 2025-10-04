@@ -108,20 +108,61 @@ class ApiClient {
         );
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        data = { success: false, message: "Invalid JSON response from server" };
+      }
+
+      // Log all response details for debugging
+      console.log("API Response:", {
+        url: `${this.baseURL}${endpoint}`,
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        data: data,
+        hasContent: Object.keys(data).length > 0,
+      });
 
       if (!response.ok) {
-        // Only log non-authentication errors and non-404 to avoid spam
-        if (response.status !== 401 && response.status !== 404) {
-          console.error("API Error Response:", {
-            url: `${this.baseURL}${endpoint}`,
-            status: response.status,
-            statusText: response.statusText,
-            data: data,
-            method: options.method || "GET",
-          });
+        // Handle empty response objects
+        if (!data || Object.keys(data).length === 0) {
+          data = {
+            success: false,
+            message: `Server error ${response.status}: ${response.statusText}`,
+            data: null,
+          };
+        }
+
+        // Log detailed error information for debugging
+        const errorInfo = {
+          url: `${this.baseURL}${endpoint}`,
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          method: options.method || "GET",
+          hasToken: !!token,
+          tokenPreview: token ? `${token.substring(0, 10)}...` : "No token",
+          isEmpty: Object.keys(data || {}).length === 0,
+          responseMessage: data?.message || "No message provided",
+        };
+
+        if (response.status === 401) {
+          console.warn("Authentication Error:", errorInfo);
+        } else if (response.status === 403) {
+          console.warn("Authorization Error (Forbidden):", errorInfo);
         } else if (response.status === 404) {
-          console.warn("API Route not found:", `${this.baseURL}${endpoint}`);
+          console.warn("API Route not found:", errorInfo);
+        }
+
+        if (response.status === 401) {
+          console.warn(
+            "Authentication failed for:",
+            `${this.baseURL}${endpoint}`
+          );
         }
 
         // Return the error response instead of throwing, so the calling code can handle it
@@ -135,16 +176,45 @@ class ApiClient {
 
       return data;
     } catch (error) {
-      console.error("API request error:", error);
-      if (
-        error instanceof Error &&
-        error.message.includes("Unexpected token")
-      ) {
-        throw new Error(
-          "Server is not running or returned HTML instead of JSON. Please start the backend server."
-        );
+      console.error("API request error:", {
+        url: `${this.baseURL}${endpoint}`,
+        error: error,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      });
+
+      if (error instanceof Error) {
+        if (error.message.includes("Unexpected token")) {
+          return {
+            success: false,
+            message:
+              "Server is not running or returned HTML instead of JSON. Please start the backend server.",
+          };
+        }
+
+        if (
+          error.message.includes("Failed to fetch") ||
+          error.message.includes("NetworkError")
+        ) {
+          return {
+            success: false,
+            message:
+              "Network error: Cannot connect to server. Please check if the backend server is running.",
+          };
+        }
+
+        if (error.message.includes("non-JSON response")) {
+          return {
+            success: false,
+            message: "Route not found or server error",
+          };
+        }
       }
-      throw error;
+
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
     }
   }
 
@@ -153,16 +223,19 @@ class ApiClient {
     endpoint: string,
     params?: Record<string, any>
   ): Promise<ApiResponse<T>> {
-    const url = new URL(`${this.baseURL}${endpoint}`);
+    let finalEndpoint = endpoint;
+
     if (params) {
+      const url = new URL(`${this.baseURL}${endpoint}`);
       Object.keys(params).forEach((key) => {
         if (params[key] !== undefined && params[key] !== null) {
           url.searchParams.append(key, params[key].toString());
         }
       });
+      finalEndpoint = endpoint + url.search;
     }
 
-    return this.request<T>(url.pathname + url.search);
+    return this.request<T>(finalEndpoint);
   }
 
   // POST request

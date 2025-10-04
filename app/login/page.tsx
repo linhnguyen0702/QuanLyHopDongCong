@@ -70,6 +70,28 @@ export default function LoginPage() {
     // Clear any existing toasts
     toast.dismiss();
 
+    // Frontend password validation
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+
+    if (password.length < 8) {
+      setError("Mật khẩu phải có ít nhất 8 ký tự");
+      toast.error("Mật khẩu phải có ít nhất 8 ký tự");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!passwordRegex.test(password)) {
+      setError(
+        "Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)"
+      );
+      toast.error(
+        "Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)"
+      );
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await login(email, password);
 

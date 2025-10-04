@@ -124,7 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        console.log(
+          "Attempting to get profile from:",
+          process.env.NEXT_PUBLIC_API_URL ||
+            "http://localhost:5000/api" + "/auth/profile"
+        );
         const response = await authApi.getProfile();
+        console.log("Profile response:", response);
+
         if (response.success && response.data) {
           setUser(response.data as User);
         } else {
@@ -135,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           removeAuthToken();
         }
       } catch (error) {
+        console.error("Auth check error (full details):", error);
         // Only log unexpected errors, not auth failures
         if (error instanceof Error && !error.message.includes("token")) {
           console.error("Auth check failed:", error);

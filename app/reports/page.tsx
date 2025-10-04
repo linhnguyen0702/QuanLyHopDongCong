@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -49,7 +51,8 @@ import {
 } from "lucide-react";
 
 export default function ReportsPage() {
-  const [timeRange, setTimeRange] = useState("6months");
+  const { collapsed } = useSidebar();
+  const [selectedDateRange, setSelectedDateRange] = useState("30days");
   const [reportType, setReportType] = useState("overview");
 
   // Sample data for charts
@@ -127,7 +130,7 @@ export default function ReportsPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}
@@ -141,7 +144,10 @@ export default function ReportsPage() {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <Select value={timeRange} onValueChange={setTimeRange}>
+              <Select
+                value={selectedDateRange}
+                onValueChange={setSelectedDateRange}
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>

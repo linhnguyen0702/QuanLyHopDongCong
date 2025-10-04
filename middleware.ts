@@ -12,6 +12,7 @@ const protectedRoutes = [
   "/audit",
   "/approvals",
   "/profile",
+  "/users",
 ];
 
 // Define public routes

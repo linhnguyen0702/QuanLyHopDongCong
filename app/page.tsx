@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth-guard";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 
 import {
   Card,
@@ -38,6 +40,7 @@ import { ContractorForm } from "@/components/contractor-form";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { collapsed } = useSidebar();
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isContractorDialogOpen, setIsContractorDialogOpen] = useState(false);
 
@@ -61,7 +64,7 @@ export default function Dashboard() {
     <AuthGuard>
       <div className="layout-container bg-background">
         <Sidebar />
-        <div className="main-content">
+        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
           <Header />
           <main className="p-6">
             {/* Page Header */}

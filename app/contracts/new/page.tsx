@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { useSidebar } from "@/hooks/use-sidebar";
 import {
   Card,
   CardContent,
@@ -37,6 +38,7 @@ import { cn } from "@/lib/utils";
 
 export default function NewContractPage() {
   const router = useRouter();
+  const { collapsed } = useSidebar();
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [attachments, setAttachments] = useState<string[]>([]);
@@ -73,7 +75,7 @@ export default function NewContractPage() {
   return (
     <div className="layout-container bg-background">
       <Sidebar />
-      <div className="main-content">
+      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
         <main className="p-6">
           {/* Page Header */}
