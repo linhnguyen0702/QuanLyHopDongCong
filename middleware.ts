@@ -26,8 +26,8 @@ const publicRoutes = [
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
-    const token = req.nextauth.token;
-    const customToken = req.cookies.get("auth_token")?.value;
+    const token = req.nextauth.token; // NextAuth token
+    const customToken = req.cookies.get("auth_token")?.value; // Custom app token
 
     // Check if the current path is protected
     const isProtectedRoute = protectedRoutes.some(
@@ -46,8 +46,8 @@ export default withAuth(
       return NextResponse.redirect(loginUrl);
     }
 
-    // If accessing a public route with token, redirect to dashboard
-    if (isPublicRoute && (token || customToken)) {
+    // Redirect authenticated NextAuth users away from public routes
+    if (isPublicRoute && token) {
       return NextResponse.redirect(new URL("/", req.url));
     }
 
@@ -58,8 +58,7 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
         const customToken = req.cookies.get("auth_token")?.value;
-
-        // Allow access if user has either NextAuth token or custom token
+        // Authorize if either NextAuth token OR custom token exists
         if (token || customToken) return true;
 
         // Allow access to public routes and demo page

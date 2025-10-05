@@ -3,6 +3,8 @@
 import type React from "react";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,10 +30,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
+  const router = useRouter();
+  const { status } = useSession();
 
   // Load saved credentials and check for errors on component mount
   useEffect(() => {
+    // If already authenticated via NextAuth or custom user, redirect away from login
+    if (status === "authenticated" || user) {
+      router.replace("/");
+      return;
+    }
+
     const savedEmail = localStorage.getItem("remembered_email");
     const savedPassword = localStorage.getItem("remembered_password");
 
@@ -60,7 +70,7 @@ export default function LoginPage() {
       toast.error("Có lỗi xảy ra trong hệ thống. Vui lòng thử lại sau.");
       setError("Lỗi hệ thống");
     }
-  }, []);
+  }, [status, user, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +104,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
+      router.replace("/");
 
       // Handle remember me functionality
       if (rememberMe) {

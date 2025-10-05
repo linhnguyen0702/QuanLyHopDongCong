@@ -32,7 +32,15 @@ export default function RootLayout({
           <AuthProvider>
             <SidebarProvider>
               <div className="min-h-screen" suppressHydrationWarning={true}>
-                <Suspense fallback={null}>{children}</Suspense>
+                <Suspense
+                  fallback={
+                    <div className="min-h-screen flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-violet-600"></div>
+                    </div>
+                  }
+                >
+                  {children}
+                </Suspense>
               </div>
               <Toaster position="top-right" richColors />
             </SidebarProvider>

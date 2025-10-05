@@ -274,6 +274,8 @@ export const authApi = {
     email: string;
     password: string;
     company: string;
+    department?: string;
+    phone?: string;
     role?: string;
   }) => apiClient.post("/auth/register", userData),
 

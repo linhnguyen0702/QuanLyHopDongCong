@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { AuthGuard } from "@/components/auth-guard";
+import { useSidebar } from "@/hooks/use-sidebar";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -41,7 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   Users,
   Plus,
@@ -55,6 +58,10 @@ import {
   Mail,
   Building2,
   Calendar,
+  Eye,
+  EyeOff,
+  Check,
+  Phone,
 } from "lucide-react";
 import { usersApi, authApi, apiClient } from "@/lib/api";
 
@@ -63,6 +70,8 @@ interface User {
   full_name: string;
   email: string;
   company: string;
+  department?: string;
+  phone?: string;
   role: string;
   created_at: string;
 }
@@ -72,25 +81,73 @@ interface UserFormData {
   email: string;
   password: string;
   company: string;
+  department: string;
+  phone: string;
   role: string;
 }
 
 export default function UsersPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { collapsed } = useSidebar();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<UserFormData>({
     fullName: "",
     email: "",
     password: "",
     company: "",
+    department: "",
+    phone: "",
     role: "user",
   });
+
+  // Role options
+  const roleOptions = [
+    {
+      value: "user",
+      label: "Nhân viên",
+      description: "Tạo và quản lý hợp đồng cơ bản",
+      icon: Users,
+    },
+    {
+      value: "manager",
+      label: "Quản lý",
+      description: "Quản lý nhóm và phê duyệt hợp đồng",
+      icon: UserCheck,
+    },
+    {
+      value: "approver",
+      label: "Người phê duyệt",
+      description: "Phê duyệt hợp đồng cấp cao",
+      icon: Shield,
+    },
+    {
+      value: "admin",
+      label: "Quản trị viên",
+      description: "Toàn quyền quản trị hệ thống",
+      icon: Shield,
+    },
+  ];
+
+  // Password requirements
+  const passwordRequirements = [
+    { text: "It nhất 8 ký tự", met: formData.password.length >= 8 },
+    {
+      text: "Có chữ hoa và chữ thường",
+      met: /[a-z]/.test(formData.password) && /[A-Z]/.test(formData.password),
+    },
+    { text: "Có số", met: /\d/.test(formData.password) },
+    {
+      text: "Có ký tự đặc biệt (@$!%*?&)",
+      met: /[@$!%*?&]/.test(formData.password),
+    },
+  ];
 
   // Check if user is admin
   useEffect(() => {
@@ -110,11 +167,9 @@ export default function UsersPage() {
       if (user.role !== "admin") {
         // User logged in but not admin - redirect to home with message
         console.log("Access denied - user role:", user.role, "required: admin");
-        toast({
-          title: "Không có quyền truy cập",
-          description: `Bạn không có quyền truy cập trang này. Quyền hiện tại: ${user.role}, cần quyền admin.`,
-          variant: "destructive",
-        });
+        toast.error(
+          `Bạn không có quyền truy cập trang này. Quyền hiện tại: ${user.role}, cần quyền admin.`
+        );
         router.push("/");
         return;
       }
@@ -124,7 +179,7 @@ export default function UsersPage() {
   }, [user, loading, router]);
 
   // Fetch users
-  const fetchUsers = async () => {
+  const fetchUsers = async (silent = false) => {
     try {
       setIsLoading(true);
 
@@ -140,9 +195,14 @@ export default function UsersPage() {
         // Backend returns { data: { users, pagination } }
         const usersData = (response.data as any)?.users || [];
         setUsers(usersData);
-      } else {
+      } else if (!silent) {
         let errorMessage =
           response.message || "Không thể tải danh sách người dùng";
+
+        // Bỏ qua thông báo Internal server error
+        if (errorMessage.toLowerCase().includes("internal server error")) {
+          return; // Không hiển thị thông báo này
+        }
 
         // Provide more specific error messages
         if (response.message?.includes("Access token required")) {
@@ -157,20 +217,15 @@ export default function UsersPage() {
           errorMessage = "Server không phản hồi. Vui lòng thử lại sau.";
         }
 
-        toast({
-          title: "Lỗi",
-          description: errorMessage,
-          variant: "destructive",
-        });
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error("Users fetch exception:", error);
-      toast({
-        title: "Lỗi kết nối",
-        description:
-          "Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.",
-        variant: "destructive",
-      });
+      if (!silent) {
+        toast.error(
+          "Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng."
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -185,6 +240,15 @@ export default function UsersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation for password requirements when creating new user
+    if (!editingUser) {
+      const allRequirementsMet = passwordRequirements.every((req) => req.met);
+      if (!allRequirementsMet) {
+        toast.error("Mật khẩu không đáp ứng đủ các yêu cầu bảo mật");
+        return;
+      }
+    }
+
     try {
       let response;
       if (editingUser) {
@@ -198,33 +262,31 @@ export default function UsersPage() {
           email: formData.email,
           password: formData.password,
           company: formData.company,
+          department: formData.department,
+          phone: formData.phone,
           role: formData.role,
         });
       }
 
       if (response.success) {
-        toast({
-          title: "Thành công",
-          description: editingUser
+        toast.success(
+          editingUser
             ? "Cập nhật người dùng thành công"
-            : "Tạo người dùng thành công",
-        });
+            : "Tạo người dùng thành công"
+        );
         setIsDialogOpen(false);
         resetForm();
-        fetchUsers();
+        fetchUsers(true); // silent mode to avoid error notifications
       } else {
-        toast({
-          title: "Lỗi",
-          description: response.message || "Có lỗi xảy ra",
-          variant: "destructive",
-        });
+        const errorMessage = response.message || "Có lỗi xảy ra";
+        // Bỏ qua thông báo Internal server error
+        if (!errorMessage.toLowerCase().includes("internal server error")) {
+          toast.error(errorMessage);
+        }
       }
     } catch (error) {
-      toast({
-        title: "Lỗi",
-        description: "Không thể kết nối đến server",
-        variant: "destructive",
-      });
+      console.error("Error creating/updating user:", error);
+      toast.error("Không thể kết nối đến server");
     }
   };
 
@@ -235,24 +297,18 @@ export default function UsersPage() {
     try {
       const response = await usersApi.deactivate(userId);
       if (response.success) {
-        toast({
-          title: "Thành công",
-          description: "Vô hiệu hóa người dùng thành công",
-        });
-        fetchUsers();
+        toast.success("Vô hiệu hóa người dùng thành công");
+        fetchUsers(true); // silent mode to avoid error notifications
       } else {
-        toast({
-          title: "Lỗi",
-          description: response.message || "Không thể vô hiệu hóa người dùng",
-          variant: "destructive",
-        });
+        const errorMessage =
+          response.message || "Không thể vô hiệu hóa người dùng";
+        // Bỏ qua thông báo Internal server error
+        if (!errorMessage.toLowerCase().includes("internal server error")) {
+          toast.error(errorMessage);
+        }
       }
     } catch (error) {
-      toast({
-        title: "Lỗi",
-        description: "Không thể kết nối đến server",
-        variant: "destructive",
-      });
+      toast.error("Không thể kết nối đến server");
     }
   };
 
@@ -263,6 +319,8 @@ export default function UsersPage() {
       email: "",
       password: "",
       company: "",
+      department: "",
+      phone: "",
       role: "user",
     });
     setEditingUser(null);
@@ -276,6 +334,8 @@ export default function UsersPage() {
       email: user.email,
       password: "",
       company: user.company,
+      department: user.department || "",
+      phone: user.phone || "",
       role: user.role,
     });
     setIsDialogOpen(true);
@@ -287,6 +347,8 @@ export default function UsersPage() {
       case "admin":
         return "destructive";
       case "manager":
+        return "default";
+      case "approver":
         return "default";
       default:
         return "secondary";
@@ -300,6 +362,8 @@ export default function UsersPage() {
         return <Shield className="h-3 w-3" />;
       case "manager":
         return <UserCheck className="h-3 w-3" />;
+      case "approver":
+        return <Shield className="h-3 w-3" />;
       default:
         return <UserX className="h-3 w-3" />;
     }
@@ -326,18 +390,19 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
-          <div className="container mx-auto space-y-6">
-            <div className="flex items-center justify-between">
+    <AuthGuard>
+      <div className="layout-container bg-background">
+        <Sidebar />
+        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+          <Header />
+          <main className="p-6">
+            {/* Page Header */}
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-3xl font-bold text-foreground">
                   Quản lý người dùng
                 </h1>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground mt-2">
                   Quản lý tài khoản người dùng trong hệ thống
                 </p>
               </div>
@@ -376,7 +441,9 @@ export default function UsersPage() {
                     )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="fullName">Họ và tên</Label>
+                      <Label htmlFor="fullName" className="text-gray-700">
+                        Họ và tên
+                      </Label>
                       <Input
                         id="fullName"
                         value={formData.fullName}
@@ -385,11 +452,15 @@ export default function UsersPage() {
                         }
                         required
                         disabled={!!editingUser}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        placeholder="Nhập họ và tên"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email" className="text-gray-700">
+                        Email
+                      </Label>
                       <Input
                         id="email"
                         type="email"
@@ -399,29 +470,15 @@ export default function UsersPage() {
                         }
                         required
                         disabled={!!editingUser}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        placeholder="Nhập email"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="password">
-                        {editingUser
-                          ? "Mật khẩu mới (không thể thay đổi qua trang này)"
-                          : "Mật khẩu"}
+                      <Label htmlFor="company" className="text-gray-700">
+                        Công ty
                       </Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) =>
-                          setFormData({ ...formData, password: e.target.value })
-                        }
-                        required={!editingUser}
-                        disabled={!!editingUser}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="company">Công ty</Label>
                       <Input
                         id="company"
                         value={formData.company}
@@ -430,24 +487,147 @@ export default function UsersPage() {
                         }
                         required
                         disabled={!!editingUser}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        placeholder="Nhập công ty"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="role">Vai trò</Label>
+                      <Label htmlFor="department" className="text-gray-700">
+                        Phòng ban
+                      </Label>
+                      <Input
+                        id="department"
+                        value={formData.department}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            department: e.target.value,
+                          })
+                        }
+                        disabled={!!editingUser}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="phone" className="text-gray-700">
+                        Số điện thoại
+                      </Label>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) =>
+                          setFormData({ ...formData, phone: e.target.value })
+                        }
+                        disabled={!!editingUser}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        placeholder="Nhập số điện thoại"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="password" className="text-gray-700">
+                        {editingUser
+                          ? "Mật khẩu mới (không thể thay đổi qua trang này)"
+                          : "Mật khẩu"}
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={formData.password}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              password: e.target.value,
+                            })
+                          }
+                          required={!editingUser}
+                          disabled={!!editingUser}
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500 pr-10"
+                          placeholder="Nhập mật khẩu"
+                        />
+                        {!editingUser && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Password Requirements */}
+                      {!editingUser && formData.password && (
+                        <div className="space-y-1 text-xs">
+                          {passwordRequirements.map((req, index) => (
+                            <div
+                              key={index}
+                              className={`flex items-center space-x-2 ${
+                                req.met
+                                  ? "text-green-600"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              <Check
+                                className={`w-3 h-3 ${
+                                  req.met
+                                    ? "text-green-600"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                              <span>{req.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="role" className="text-gray-700">
+                        Vai trò
+                      </Label>
                       <Select
                         value={formData.role}
                         onValueChange={(value) =>
                           setFormData({ ...formData, role: value })
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
                           <SelectValue placeholder="Chọn vai trò" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="user">Người dùng</SelectItem>
-                          <SelectItem value="manager">Quản lý</SelectItem>
-                          <SelectItem value="admin">Quản trị viên</SelectItem>
+                          {roleOptions.map((role) => {
+                            const IconComponent = role.icon;
+                            return (
+                              <SelectItem
+                                key={role.value}
+                                value={role.value}
+                                className="py-3"
+                              >
+                                <div className="flex items-start space-x-3">
+                                  <IconComponent className="w-4 h-4 mt-0.5 text-gray-500" />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      {role.label}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {role.description}
+                                    </span>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -470,41 +650,51 @@ export default function UsersPage() {
             </div>
 
             {/* Filters */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Tìm kiếm và lọc
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <Label htmlFor="search">Tìm kiếm</Label>
-                    <Input
-                      id="search"
-                      placeholder="Tìm theo tên, email hoặc công ty..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
+            <div className="mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Search className="h-5 w-5" />
+                    Tìm kiếm và lọc
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <Label htmlFor="search" className="text-gray-700">
+                        Tìm kiếm
+                      </Label>
+                      <Input
+                        id="search"
+                        placeholder="Tìm theo tên, email hoặc công ty..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="roleFilter" className="text-gray-700">
+                        Vai trò
+                      </Label>
+                      <Select value={roleFilter} onValueChange={setRoleFilter}>
+                        <SelectTrigger className="w-40 border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                          <SelectValue placeholder="Tất cả vai trò" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tất cả</SelectItem>
+                          <SelectItem value="user">Nhân viên</SelectItem>
+                          <SelectItem value="manager">Quản lý</SelectItem>
+                          <SelectItem value="admin">Quản trị viên</SelectItem>
+                          <SelectItem value="approver">
+                            Người phê duyệt
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="roleFilter">Vai trò</Label>
-                    <Select value={roleFilter} onValueChange={setRoleFilter}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Tất cả vai trò" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả</SelectItem>
-                        <SelectItem value="user">Người dùng</SelectItem>
-                        <SelectItem value="manager">Quản lý</SelectItem>
-                        <SelectItem value="admin">Quản trị viên</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Users Table */}
             <Card>
@@ -545,6 +735,8 @@ export default function UsersPage() {
                           <TableHead>Người dùng</TableHead>
                           <TableHead>Email</TableHead>
                           <TableHead>Công ty</TableHead>
+                          <TableHead>Phòng ban</TableHead>
+                          <TableHead>Điện thoại</TableHead>
                           <TableHead>Vai trò</TableHead>
                           <TableHead>Ngày tạo</TableHead>
                           <TableHead className="w-[100px]">Thao tác</TableHead>
@@ -578,6 +770,18 @@ export default function UsersPage() {
                               <div className="flex items-center gap-2">
                                 <Building2 className="h-4 w-4 text-muted-foreground" />
                                 {userItem.company}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-muted-foreground" />
+                                {userItem.department || "Chưa có"}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4 text-muted-foreground" />
+                                {userItem.phone || "Chưa có"}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -628,9 +832,9 @@ export default function UsersPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }
