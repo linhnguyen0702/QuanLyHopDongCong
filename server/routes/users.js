@@ -53,7 +53,7 @@ router.get(
       console.log("Query params:", { page, limit, search, role, offset });
 
       let query =
-        "SELECT id, full_name, email, company, role, created_at FROM users WHERE 1=1";
+        "SELECT id, full_name, email, company, department, phone, role, created_at FROM users WHERE 1=1";
       const params = [];
 
       if (role) {
@@ -66,8 +66,9 @@ router.get(
         params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       }
 
-      query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
-      params.push(Number.parseInt(limit), Number.parseInt(offset));
+      query += ` ORDER BY created_at DESC LIMIT ${parseInt(
+        limit
+      )} OFFSET ${parseInt(offset)}`;
 
       console.log("Executing query:", query, "with params:", params);
       const [users] = await pool.execute(query, params);
@@ -96,8 +97,8 @@ router.get(
         data: {
           users,
           pagination: {
-            page: Number.parseInt(page),
-            limit: Number.parseInt(limit),
+            page: parseInt(page),
+            limit: parseInt(limit),
             total,
             pages: Math.ceil(total / limit),
           },
@@ -121,10 +122,7 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
     const requestingUserRole = req.user.role;
 
     // Check if user is requesting their own profile or is admin
-    if (
-      Number.parseInt(id) !== requestingUserId &&
-      requestingUserRole !== "admin"
-    ) {
+    if (parseInt(id) !== requestingUserId && requestingUserRole !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Access denied",
@@ -132,7 +130,7 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
     }
 
     const [users] = await pool.execute(
-      "SELECT id, full_name, email, company, role, created_at FROM users WHERE id = ?",
+      "SELECT id, full_name, email, company, department, phone, role, created_at FROM users WHERE id = ?",
       [id]
     );
 
@@ -212,7 +210,7 @@ router.put(
       }
 
       // Prevent admin from changing their own role
-      if (Number.parseInt(id) === req.user.userId) {
+      if (parseInt(id) === req.user.userId) {
         return res.status(400).json({
           success: false,
           message: "Cannot change your own role",
@@ -231,6 +229,114 @@ router.put(
       });
     } catch (error) {
       console.error("Update user role error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
+// Update user info (admin only)
+router.put(
+  "/:id",
+  validateId,
+  requireRole(["admin"]),
+  logActivity("UPDATE"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fullName, email, company, department, phone, role } = req.body;
+
+      // Validate required fields
+      if (!fullName || !email || !company) {
+        return res.status(400).json({
+          success: false,
+          message: "Full name, email, and company are required",
+        });
+      }
+
+      // Validate role if provided
+      if (role) {
+        const validRoles = ["admin", "manager", "approver", "user"];
+        if (!validRoles.includes(role)) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Invalid role. Must be one of: admin, manager, approver, user",
+          });
+        }
+      }
+
+      // Check if user exists
+      const [users] = await pool.execute(
+        "SELECT id, email FROM users WHERE id = ?",
+        [id]
+      );
+
+      if (users.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const currentUser = users[0];
+
+      // Check if email is being changed and if it's already taken by another user
+      if (email !== currentUser.email) {
+        const [existingUsers] = await pool.execute(
+          "SELECT id FROM users WHERE email = ? AND id != ?",
+          [email, id]
+        );
+
+        if (existingUsers.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Email already exists",
+          });
+        }
+      }
+
+      // Prevent admin from changing their own role to non-admin
+      if (parseInt(id) === req.user.userId && role && role !== "admin") {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot change your own admin role",
+        });
+      }
+
+      // Update user information
+      await pool.execute(
+        `UPDATE users 
+         SET full_name = ?, email = ?, company = ?, department = ?, phone = ?, role = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          fullName,
+          email,
+          company,
+          department || null,
+          phone || null,
+          role || currentUser.role,
+          id,
+        ]
+      );
+
+      res.json({
+        success: true,
+        message: "User updated successfully",
+      });
+    } catch (error) {
+      console.error("Update user error:", error);
+
+      // Check for duplicate email error
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(400).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -262,7 +368,7 @@ router.put(
       }
 
       // Prevent admin from deactivating themselves
-      if (Number.parseInt(id) === req.user.userId) {
+      if (parseInt(id) === req.user.userId) {
         return res.status(400).json({
           success: false,
           message: "Cannot deactivate your own account",
@@ -289,6 +395,64 @@ router.put(
   }
 );
 
+// Delete user (admin only)
+router.delete(
+  "/:id",
+  validateId,
+  requireRole(["admin"]),
+  logActivity("DELETE"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if user exists
+      const [users] = await pool.execute("SELECT id FROM users WHERE id = ?", [
+        id,
+      ]);
+
+      if (users.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Prevent admin from deleting themselves
+      if (parseInt(id) === req.user.userId) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot delete your own account",
+        });
+      }
+
+      // Delete user from database
+      // Note: This will cascade delete related records if foreign keys are set up properly
+      await pool.execute("DELETE FROM users WHERE id = ?", [id]);
+
+      res.json({
+        success: true,
+        message: "User deleted successfully",
+      });
+    } catch (error) {
+      console.error("Delete user error:", error);
+
+      // Check if it's a foreign key constraint error
+      if (error.code === "ER_ROW_IS_REFERENCED_2") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot delete user - user has related records (contracts, activities, etc.)",
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
 // Get user activity log
 router.get(
   "/:id/activity",
@@ -304,10 +468,7 @@ router.get(
       const requestingUserRole = req.user.role;
 
       // Check if user is requesting their own activity or is admin
-      if (
-        Number.parseInt(id) !== requestingUserId &&
-        requestingUserRole !== "admin"
-      ) {
+      if (parseInt(id) !== requestingUserId && requestingUserRole !== "admin") {
         return res.status(403).json({
           success: false,
           message: "Access denied",
@@ -334,9 +495,9 @@ router.get(
       FROM audit_logs 
       WHERE user_id = ?
       ORDER BY created_at DESC 
-      LIMIT ? OFFSET ?
+      LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
     `,
-        [id, Number.parseInt(limit), Number.parseInt(offset)]
+        [id]
       );
 
       // Get total count
@@ -352,8 +513,8 @@ router.get(
           user: users[0],
           activities,
           pagination: {
-            page: Number.parseInt(page),
-            limit: Number.parseInt(limit),
+            page: parseInt(page),
+            limit: parseInt(limit),
             total,
             pages: Math.ceil(total / limit),
           },

@@ -390,7 +390,21 @@ export const usersApi = {
   updateRole: (id: number, role: string) =>
     apiClient.put(`/users/${id}/role`, { role }),
 
+  update: (
+    id: number,
+    userData: {
+      fullName: string;
+      email: string;
+      company: string;
+      department?: string;
+      phone?: string;
+      role: string;
+    }
+  ) => apiClient.put(`/users/${id}`, userData),
+
   deactivate: (id: number) => apiClient.put(`/users/${id}/deactivate`),
+
+  delete: (id: number) => apiClient.delete(`/users/${id}`),
 
   getActivity: (id: number, params?: PaginationParams) =>
     apiClient.get(`/users/${id}/activity`, params),

@@ -19,11 +19,13 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  CheckCircle,
 } from "lucide-react";
 
 const navigation = [
   { name: "Tổng quan", href: "/", icon: Home },
   { name: "Hợp đồng", href: "/contracts", icon: FileText },
+  { name: "Phê duyệt hợp đồng", href: "/approvals", icon: CheckCircle },
   { name: "Nhà thầu", href: "/contractors", icon: Building2 },
   { name: "Báo cáo", href: "/reports", icon: BarChart3 },
   { name: "Audit Trail", href: "/audit", icon: History },
@@ -98,6 +100,10 @@ export function Sidebar() {
               // Chỉ hiển thị trang Users cho admin
               if (item.href === "/users") {
                 return user?.role === "admin";
+              }
+              // Chỉ hiển thị trang Phê duyệt cho admin và approver
+              if (item.href === "/approvals") {
+                return user?.role === "admin" || user?.role === "approver";
               }
               return true;
             })

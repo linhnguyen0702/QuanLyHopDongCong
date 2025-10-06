@@ -44,6 +44,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { toast } from "sonner";
 import {
   Users,
@@ -62,6 +71,7 @@ import {
   EyeOff,
   Check,
   Phone,
+  RefreshCw,
 } from "lucide-react";
 import { usersApi, authApi, apiClient } from "@/lib/api";
 
@@ -97,6 +107,12 @@ export default function UsersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [itemsPerPage] = useState(10);
   const [formData, setFormData] = useState<UserFormData>({
     fullName: "",
     email: "",
@@ -168,7 +184,9 @@ export default function UsersPage() {
         // User logged in but not admin - redirect to home with message
         console.log("Access denied - user role:", user.role, "required: admin");
         toast.error(
-          `Bạn không có quyền truy cập trang này. Quyền hiện tại: ${user.role}, cần quyền admin.`
+          `Bạn không có quyền truy cập trang này. Quyền hiện tại: ${getRoleDisplayName(
+            user.role
+          )}, cần quyền Quản trị viên.`
         );
         router.push("/");
         return;
@@ -179,11 +197,14 @@ export default function UsersPage() {
   }, [user, loading, router]);
 
   // Fetch users
-  const fetchUsers = async (silent = false) => {
+  const fetchUsers = async (silent = false, page = currentPage) => {
     try {
       setIsLoading(true);
 
-      const params: any = {};
+      const params: any = {
+        page: page,
+        limit: itemsPerPage,
+      };
       if (search) params.search = search;
       if (roleFilter !== "all") params.role = roleFilter;
 
@@ -193,8 +214,23 @@ export default function UsersPage() {
 
       if (response.success) {
         // Backend returns { data: { users, pagination } }
-        const usersData = (response.data as any)?.users || [];
+        const responseData = response.data as any;
+        const usersData = responseData?.users || responseData || [];
+        const paginationData = responseData?.pagination;
+
         setUsers(usersData);
+
+        // Update pagination state if pagination data is available
+        if (paginationData) {
+          setTotalPages(paginationData.pages || 1);
+          setTotalUsers(paginationData.total || usersData.length);
+          setCurrentPage(paginationData.page || page);
+        } else {
+          // Fallback if no pagination data
+          setTotalUsers(usersData.length);
+          setTotalPages(1);
+          setCurrentPage(1);
+        }
       } else if (!silent) {
         let errorMessage =
           response.message || "Không thể tải danh sách người dùng";
@@ -230,9 +266,16 @@ export default function UsersPage() {
       setIsLoading(false);
     }
   };
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchUsers(false, page);
+  };
+
   useEffect(() => {
     if (user && user.role === "admin") {
-      fetchUsers();
+      setCurrentPage(1); // Reset to first page when search/filter changes
+      fetchUsers(false, 1);
     }
   }, [user, search, roleFilter]);
 
@@ -252,9 +295,15 @@ export default function UsersPage() {
     try {
       let response;
       if (editingUser) {
-        // Update user
-        // Backend chỉ hỗ trợ cập nhật role, không hỗ trợ full update
-        response = await usersApi.updateRole(editingUser.id, formData.role);
+        // Update user - now supports full update
+        response = await usersApi.update(editingUser.id, {
+          fullName: formData.fullName,
+          email: formData.email,
+          company: formData.company,
+          department: formData.department,
+          phone: formData.phone,
+          role: formData.role,
+        });
       } else {
         // Create new user
         response = await authApi.register({
@@ -276,7 +325,7 @@ export default function UsersPage() {
         );
         setIsDialogOpen(false);
         resetForm();
-        fetchUsers(true); // silent mode to avoid error notifications
+        fetchUsers(true, currentPage); // silent mode to avoid error notifications
       } else {
         const errorMessage = response.message || "Có lỗi xảy ra";
         // Bỏ qua thông báo Internal server error
@@ -290,18 +339,21 @@ export default function UsersPage() {
     }
   };
 
-  // Handle deactivate user
-  const handleDeactivate = async (userId: number) => {
-    if (!confirm("Bạn có chắc chắn muốn vô hiệu hóa người dùng này?")) return;
+  // Handle delete user
+  const handleDelete = async (userId: number) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa người dùng này?")) return;
 
     try {
-      const response = await usersApi.deactivate(userId);
+      const response = await usersApi.delete(userId);
       if (response.success) {
-        toast.success("Vô hiệu hóa người dùng thành công");
-        fetchUsers(true); // silent mode to avoid error notifications
+        toast.success("Xóa người dùng thành công");
+
+        // If we deleted the last user on current page, go to previous page
+        const newPage =
+          users.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+        fetchUsers(true, newPage); // silent mode to avoid error notifications
       } else {
-        const errorMessage =
-          response.message || "Không thể vô hiệu hóa người dùng";
+        const errorMessage = response.message || "Không thể xóa người dùng";
         // Bỏ qua thông báo Internal server error
         if (!errorMessage.toLowerCase().includes("internal server error")) {
           toast.error(errorMessage);
@@ -339,6 +391,22 @@ export default function UsersPage() {
       role: user.role,
     });
     setIsDialogOpen(true);
+  };
+
+  // Get role display name
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case "admin":
+        return "Quản trị viên";
+      case "manager":
+        return "Quản lý";
+      case "approver":
+        return "Người phê duyệt";
+      case "user":
+        return "Nhân viên";
+      default:
+        return "Nhân viên";
+    }
   };
 
   // Get role badge variant
@@ -407,246 +475,263 @@ export default function UsersPage() {
                 </p>
               </div>
 
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={resetForm}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Thêm người dùng
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>
-                      {editingUser
-                        ? "Sửa thông tin người dùng"
-                        : "Thêm người dùng mới"}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {editingUser
-                        ? "Cập nhật thông tin người dùng. Để trống mật khẩu nếu không muốn thay đổi."
-                        : "Nhập thông tin để tạo tài khoản người dùng mới."}
-                    </DialogDescription>
-                  </DialogHeader>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => fetchUsers(false, currentPage)}
+                  disabled={isLoading}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${
+                      isLoading ? "animate-spin" : ""
+                    }`}
+                  />
+                  Làm mới
+                </Button>
 
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    {editingUser && (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          Hiện tại chỉ có thể thay đổi vai trò của người dùng.
-                          Để cập nhật thông tin khác, vui lòng liên hệ quản trị
-                          viên hệ thống.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName" className="text-gray-700">
-                        Họ và tên
-                      </Label>
-                      <Input
-                        id="fullName"
-                        value={formData.fullName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, fullName: e.target.value })
-                        }
-                        required
-                        disabled={!!editingUser}
-                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                        placeholder="Nhập họ và tên"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-gray-700">
-                        Email
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) =>
-                          setFormData({ ...formData, email: e.target.value })
-                        }
-                        required
-                        disabled={!!editingUser}
-                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                        placeholder="Nhập email"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="company" className="text-gray-700">
-                        Công ty
-                      </Label>
-                      <Input
-                        id="company"
-                        value={formData.company}
-                        onChange={(e) =>
-                          setFormData({ ...formData, company: e.target.value })
-                        }
-                        required
-                        disabled={!!editingUser}
-                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                        placeholder="Nhập công ty"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="department" className="text-gray-700">
-                        Phòng ban
-                      </Label>
-                      <Input
-                        id="department"
-                        value={formData.department}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            department: e.target.value,
-                          })
-                        }
-                        disabled={!!editingUser}
-                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="text-gray-700">
-                        Số điện thoại
-                      </Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) =>
-                          setFormData({ ...formData, phone: e.target.value })
-                        }
-                        disabled={!!editingUser}
-                        className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                        placeholder="Nhập số điện thoại"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password" className="text-gray-700">
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={resetForm}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Thêm người dùng
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>
                         {editingUser
-                          ? "Mật khẩu mới (không thể thay đổi qua trang này)"
-                          : "Mật khẩu"}
-                      </Label>
-                      <div className="relative">
+                          ? "Sửa thông tin người dùng"
+                          : "Thêm người dùng mới"}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {editingUser
+                          ? "Cập nhật thông tin người dùng. Email không thể thay đổi vì lý do bảo mật."
+                          : "Nhập thông tin để tạo tài khoản người dùng mới."}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      {editingUser && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            Có thể cập nhật hầu hết thông tin người dùng. Email
+                            không thể thay đổi vì lý do bảo mật. Để thay đổi mật
+                            khẩu, vui lòng sử dụng chức năng đặt lại mật khẩu.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="fullName" className="text-gray-700">
+                          Họ và tên
+                        </Label>
                         <Input
-                          id="password"
-                          type={showPassword ? "text" : "password"}
-                          value={formData.password}
+                          id="fullName"
+                          value={formData.fullName}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              password: e.target.value,
+                              fullName: e.target.value,
                             })
                           }
-                          required={!editingUser}
-                          disabled={!!editingUser}
-                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500 pr-10"
-                          placeholder="Nhập mật khẩu"
+                          required
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                          placeholder="Nhập họ và tên"
                         />
-                        {!editingUser && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
-                        )}
                       </div>
 
-                      {/* Password Requirements */}
-                      {!editingUser && formData.password && (
-                        <div className="space-y-1 text-xs">
-                          {passwordRequirements.map((req, index) => (
-                            <div
-                              key={index}
-                              className={`flex items-center space-x-2 ${
-                                req.met
-                                  ? "text-green-600"
-                                  : "text-muted-foreground"
-                              }`}
+                      <div className="space-y-2">
+                        <Label htmlFor="email" className="text-gray-700">
+                          Email
+                        </Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email: e.target.value })
+                          }
+                          required
+                          disabled={!!editingUser} // Keep email disabled for security reasons
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                          placeholder="Nhập email"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="company" className="text-gray-700">
+                          Công ty
+                        </Label>
+                        <Input
+                          id="company"
+                          value={formData.company}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              company: e.target.value,
+                            })
+                          }
+                          required
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                          placeholder="Nhập công ty"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="department" className="text-gray-700">
+                          Phòng ban
+                        </Label>
+                        <Input
+                          id="department"
+                          value={formData.department}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              department: e.target.value,
+                            })
+                          }
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="phone" className="text-gray-700">
+                          Số điện thoại
+                        </Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone: e.target.value })
+                          }
+                          className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                          placeholder="Nhập số điện thoại"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="password" className="text-gray-700">
+                          {editingUser
+                            ? "Mật khẩu mới (không thể thay đổi qua trang này)"
+                            : "Mật khẩu"}
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            value={formData.password}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                password: e.target.value,
+                              })
+                            }
+                            required={!editingUser}
+                            disabled={!!editingUser}
+                            className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500 pr-10"
+                            placeholder="Nhập mật khẩu"
+                          />
+                          {!editingUser && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                              onClick={() => setShowPassword(!showPassword)}
                             >
-                              <Check
-                                className={`w-3 h-3 ${
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Password Requirements */}
+                        {!editingUser && formData.password && (
+                          <div className="space-y-1 text-xs">
+                            {passwordRequirements.map((req, index) => (
+                              <div
+                                key={index}
+                                className={`flex items-center space-x-2 ${
                                   req.met
                                     ? "text-green-600"
                                     : "text-muted-foreground"
                                 }`}
-                              />
-                              <span>{req.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="role" className="text-gray-700">
-                        Vai trò
-                      </Label>
-                      <Select
-                        value={formData.role}
-                        onValueChange={(value) =>
-                          setFormData({ ...formData, role: value })
-                        }
-                      >
-                        <SelectTrigger className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
-                          <SelectValue placeholder="Chọn vai trò" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roleOptions.map((role) => {
-                            const IconComponent = role.icon;
-                            return (
-                              <SelectItem
-                                key={role.value}
-                                value={role.value}
-                                className="py-3"
                               >
-                                <div className="flex items-start space-x-3">
-                                  <IconComponent className="w-4 h-4 mt-0.5 text-gray-500" />
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">
-                                      {role.label}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {role.description}
-                                    </span>
-                                  </div>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                                <Check
+                                  className={`w-3 h-3 ${
+                                    req.met
+                                      ? "text-green-600"
+                                      : "text-muted-foreground"
+                                  }`}
+                                />
+                                <span>{req.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setIsDialogOpen(false)}
-                      >
-                        Hủy
-                      </Button>
-                      <Button type="submit">
-                        {editingUser ? "Cập nhật" : "Tạo mới"}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
+                      <div className="space-y-2">
+                        <Label htmlFor="role" className="text-gray-700">
+                          Vai trò
+                        </Label>
+                        <Select
+                          value={formData.role}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, role: value })
+                          }
+                        >
+                          <SelectTrigger className="border border-gray-300 bg-transparent focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                            <SelectValue placeholder="Chọn vai trò" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roleOptions.map((role) => {
+                              const IconComponent = role.icon;
+                              return (
+                                <SelectItem
+                                  key={role.value}
+                                  value={role.value}
+                                  className="py-3"
+                                >
+                                  <div className="flex items-start space-x-3">
+                                    <IconComponent className="w-4 h-4 mt-0.5 text-gray-500" />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">
+                                        {role.label}
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {role.description}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsDialogOpen(false)}
+                        >
+                          Hủy
+                        </Button>
+                        <Button type="submit">
+                          {editingUser ? "Cập nhật" : "Tạo mới"}
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
             {/* Filters */}
@@ -701,7 +786,7 @@ export default function UsersPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  Danh sách người dùng ({users.length})
+                  Danh sách người dùng ({totalUsers})
                 </CardTitle>
                 <CardDescription>
                   Quản lý tất cả người dùng trong hệ thống
@@ -790,11 +875,7 @@ export default function UsersPage() {
                                 className="flex items-center gap-1 w-fit"
                               >
                                 {getRoleIcon(userItem.role)}
-                                {userItem.role === "admin"
-                                  ? "Quản trị viên"
-                                  : userItem.role === "manager"
-                                  ? "Quản lý"
-                                  : "Người dùng"}
+                                {getRoleDisplayName(userItem.role)}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -817,8 +898,8 @@ export default function UsersPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleDeactivate(userItem.id)}
-                                  disabled={user?.id === userItem.id} // Prevent self-deactivation
+                                  onClick={() => handleDelete(userItem.id)}
+                                  disabled={user?.id === userItem.id} // Prevent self-deletion
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -830,6 +911,88 @@ export default function UsersPage() {
                     </Table>
                   </div>
                 )}
+
+                {/* Pagination */}
+                <div className="px-2 py-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Hiển thị {users.length} trong tổng số {totalUsers} người
+                      dùng
+                    </div>
+
+                    <div className="flex justify-end">
+                      {totalPages > 1 && (
+                        <Pagination>
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious
+                                onClick={() =>
+                                  currentPage > 1 &&
+                                  handlePageChange(currentPage - 1)
+                                }
+                                className={
+                                  currentPage <= 1
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                                }
+                              />
+                            </PaginationItem>
+
+                            {/* Show page numbers */}
+                            {Array.from(
+                              { length: totalPages },
+                              (_, i) => i + 1
+                            ).map((page) => {
+                              // Show first page, last page, current page, and adjacent pages
+                              if (
+                                page === 1 ||
+                                page === totalPages ||
+                                (page >= currentPage - 1 &&
+                                  page <= currentPage + 1)
+                              ) {
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationLink
+                                      onClick={() => handlePageChange(page)}
+                                      isActive={currentPage === page}
+                                      className="cursor-pointer"
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                );
+                              } else if (
+                                page === currentPage - 2 ||
+                                page === currentPage + 2
+                              ) {
+                                return (
+                                  <PaginationItem key={page}>
+                                    <PaginationEllipsis />
+                                  </PaginationItem>
+                                );
+                              }
+                              return null;
+                            })}
+
+                            <PaginationItem>
+                              <PaginationNext
+                                onClick={() =>
+                                  currentPage < totalPages &&
+                                  handlePageChange(currentPage + 1)
+                                }
+                                className={
+                                  currentPage >= totalPages
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                                }
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </main>
