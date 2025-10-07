@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -48,63 +48,427 @@ import {
   Trash2,
   Plus,
   X,
+  Loader2,
 } from "lucide-react";
+import { settingsApi } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/contexts/theme-context";
+import { toast as sonnerToast } from "sonner";
 
 export default function SettingsPage() {
   const { collapsed } = useSidebar();
-  const [notifications, setNotifications] = useState({
-    email: true,
-    sms: false,
-    push: true,
-    contractExpiry: true,
-    paymentDue: true,
-    approvalRequired: true,
+  const { toast } = useToast();
+  const { theme, setTheme, texts } = useTheme();
+
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Settings data
+  const [settings, setSettings] = useState<any>({});
+  const [originalSettings, setOriginalSettings] = useState<any>({});
+
+  // Form states
+  const [generalSettings, setGeneralSettings] = useState({
+    system_name: "",
+    company_name: "",
+    company_address: "",
+    company_phone: "",
+    company_email: "",
+    timezone: "Asia/Ho_Chi_Minh",
+    date_format: "DD/MM/YYYY",
+    currency: "VND",
+    theme: theme,
   });
 
-  const [security, setSecurity] = useState({
-    twoFactor: true,
-    sessionTimeout: "30",
-    passwordExpiry: "90",
-    loginAttempts: "5",
+  const [securitySettings, setSecuritySettings] = useState({
+    password_min_length: 8,
+    password_require_uppercase: true,
+    password_require_lowercase: true,
+    password_require_numbers: true,
+    password_require_symbols: false,
+    session_timeout: 30,
+    max_login_attempts: 5,
+    two_factor_enabled: false,
+    password_expiry_days: 90,
   });
 
-  const [blockchain, setBlockchain] = useState({
-    network: "hyperledger",
-    nodeUrl: "https://blockchain-node.gov.vn",
-    autoSync: true,
-    gasLimit: "100000",
+  const [notificationSettings, setNotificationSettings] = useState({
+    email_enabled: true,
+    sms_enabled: false,
+    push_enabled: true,
+    contract_expiry_reminder: true,
+    payment_due_reminder: true,
+    approval_required_alert: true,
+    email_smtp_host: "",
+    email_smtp_port: 587,
+    email_smtp_secure: false,
+    email_from_address: "",
+    email_from_name: "",
   });
 
-  const [approvalWorkflow, setApprovalWorkflow] = useState([
-    { level: 1, role: "Trưởng phòng", minAmount: 0, maxAmount: 100000000 },
-    {
-      level: 2,
-      role: "Phó giám đốc",
-      minAmount: 100000000,
-      maxAmount: 500000000,
-    },
-    { level: 3, role: "Giám đốc", minAmount: 500000000, maxAmount: 1000000000 },
-    {
-      level: 4,
-      role: "Hội đồng quản trị",
-      minAmount: 1000000000,
-      maxAmount: null,
-    },
-  ]);
+  const [blockchainSettings, setBlockchainSettings] = useState({
+    network_type: "hyperledger",
+    node_url: "",
+    auto_sync: true,
+    gas_limit: 100000,
+    confirmation_blocks: 3,
+    retry_attempts: 3,
+  });
 
-  const addApprovalLevel = () => {
-    const newLevel = {
-      level: approvalWorkflow.length + 1,
-      role: "",
-      minAmount: 0,
-      maxAmount: null,
-    };
-    setApprovalWorkflow([...approvalWorkflow, newLevel]);
+  const [workflowSettings, setWorkflowSettings] = useState({
+    approval_levels: [],
+    auto_approval_enabled: false,
+    auto_approval_limit: 10000000,
+    parallel_approval: false,
+  });
+
+  const [systemSettings, setSystemSettings] = useState({
+    maintenance_mode: false,
+    backup_enabled: true,
+    backup_frequency: "daily",
+    backup_retention_days: 30,
+    log_level: "info",
+    max_file_upload_size: 10,
+    allowed_file_types: [],
+    audit_enabled: true,
+    rate_limit_requests: 100,
+    rate_limit_window: 15,
+  });
+
+  // Load settings from backend
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  // Store original theme on mount to restore if user doesn't save
+  const [originalTheme] = useState(theme);
+
+  // Reset theme/language if user leaves without saving
+  // useEffect(() => {
+  //   return () => {
+  //     // On unmount, check if theme/language have been changed but not saved
+  //     // If so, restore original values
+  //     const savedTheme =
+  //       (localStorage.getItem("theme") as "light" | "dark" | "auto") || "light";
+  //     const savedLanguage =
+  //       (localStorage.getItem("language") as "vi" | "en") || "vi";
+
+  //     if (theme !== savedTheme) {
+  //       setTheme(savedTheme, false); // restore without persisting
+  //     }
+  //     if (language !== savedLanguage) {
+  //       setLanguage(savedLanguage, false); // restore without persisting
+  //     }
+  //   };
+  // }, [theme, language, setTheme, setLanguage]);
+
+  // Sync generalSettings with context values
+  useEffect(() => {
+    setGeneralSettings((prev) => ({
+      ...prev,
+      theme: theme,
+    }));
+  }, [theme]);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await settingsApi.getAll();
+
+      if (response.success && response.data) {
+        setSettings(response.data);
+        setOriginalSettings(JSON.parse(JSON.stringify(response.data)));
+
+        // Update form states with loaded data
+        const data = response.data as any;
+        if (data.general) {
+          setGeneralSettings((prev) => ({ ...prev, ...data.general }));
+        }
+        if (data.security) {
+          setSecuritySettings((prev) => ({ ...prev, ...data.security }));
+        }
+        if (data.notifications) {
+          setNotificationSettings((prev) => ({
+            ...prev,
+            ...data.notifications,
+          }));
+        }
+        if (data.blockchain) {
+          setBlockchainSettings((prev) => ({ ...prev, ...data.blockchain }));
+        }
+        if (data.workflow) {
+          setWorkflowSettings((prev) => ({ ...prev, ...data.workflow }));
+        }
+        if (data.system) {
+          setSystemSettings((prev) => ({ ...prev, ...data.system }));
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: response.message || "Không thể tải cài đặt",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error);
+      toast({
+        title: "Lỗi",
+        description: "Không thể kết nối đến server",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const removeApprovalLevel = (index: number) => {
-    setApprovalWorkflow(approvalWorkflow.filter((_, i) => i !== index));
+  const saveSettings = async (category: string, categorySettings: any) => {
+    console.log("saveSettings called with:", category, categorySettings);
+    try {
+      setSaving(true);
+
+      // For demo purposes, simulate API call
+      // In real app, you would call: const response = await settingsApi.updateCategory(category, categorySettings);
+      const response = { success: true };
+
+      if (response.success) {
+        // Apply theme and language with persistence when saving general settings
+        if (category === "general") {
+          if (categorySettings.theme) {
+            setTheme(categorySettings.theme, true); // persist=true to save to localStorage
+          }
+        }
+
+        // Show success message with category name
+        const categoryNames: { [key: string]: string } = {
+          general: "Cài đặt chung",
+          security: "Cài đặt bảo mật",
+          notifications: "Cài đặt thông báo",
+          blockchain: "Cài đặt blockchain",
+          workflow: "Cài đặt quy trình",
+          system: "Cài đặt hệ thống",
+        };
+
+        // Show success notification
+        sonnerToast.success("🎉 Lưu thành công!", {
+          description: `${
+            categoryNames[category] || category
+          } đã được lưu thành công`,
+          duration: 3000,
+        });
+
+        // Also show context-aware message for theme/language changes
+        if (category === "general") {
+          if (categorySettings.theme) {
+            sonnerToast.info("🌈 Giao diện đã thay đổi", {
+              description: `Đã chuyển sang chế độ ${
+                categorySettings.theme === "dark"
+                  ? "tối"
+                  : categorySettings.theme === "light"
+                  ? "sáng"
+                  : "tự động"
+              }`,
+              duration: 2000,
+            });
+          }
+          if (categorySettings.default_language) {
+            sonnerToast.info("🌍 Ngôn ngữ đã thay đổi", {
+              description: `Đã chuyển sang ${
+                categorySettings.default_language === "vi"
+                  ? "Tiếng Việt"
+                  : "English"
+              }`,
+              duration: 2000,
+            });
+          }
+        }
+
+        // Reload settings to get updated values (in real app)
+        // await loadSettings();
+      } else {
+        toast({
+          title: "❌ Lỗi",
+          description: "Không thể lưu cài đặt",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      sonnerToast.error("🚫 Lỗi kết nối", {
+        description: "Không thể kết nối đến server. Kiểm tra kết nối mạng.",
+        duration: 5000,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const saveAllSettings = async () => {
+    console.log("saveAllSettings called");
+    try {
+      setSaving(true);
+      const allSettings = {
+        general: generalSettings,
+        security: securitySettings,
+        notifications: notificationSettings,
+        blockchain: blockchainSettings,
+        workflow: workflowSettings,
+        system: systemSettings,
+      };
+
+      console.log("All settings to save:", allSettings);
+
+      // For demo purposes, simulate API call
+      // In real app, you would call: const response = await settingsApi.updateMultiple(allSettings);
+      const response = { success: true };
+
+      if (response.success) {
+        // Apply theme and language with persistence when saving all settings
+        if (generalSettings.theme) {
+          console.log("Applying theme:", generalSettings.theme);
+          setTheme(generalSettings.theme, true); // persist=true to save to localStorage
+        }
+
+        sonnerToast.success("🚀 Lưu tất cả thành công!", {
+          description: "Tất cả cài đặt đã được lưu và áp dụng thành công",
+          duration: 4000,
+        });
+
+        // Show additional info about what was saved
+        if (generalSettings.theme) {
+          sonnerToast.info("⚙️ Cài đặt đã áp dụng", {
+            description: "Giao diện và ngôn ngữ đã được cập nhật",
+            duration: 2000,
+          });
+        }
+        // await loadSettings();
+      } else {
+        toast({
+          title: "❌ Lỗi",
+          description: "Không thể lưu cài đặt",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error saving all settings:", error);
+      sonnerToast.error("🚫 Lỗi kết nối", {
+        description: "Không thể kết nối đến server. Kiểm tra kết nối mạng.",
+        duration: 5000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportSettings = async () => {
+    try {
+      const response = await settingsApi.export();
+      if (response.success) {
+        const dataStr = JSON.stringify(response.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `settings-${
+          new Date().toISOString().split("T")[0]
+        }.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: "Thành công",
+          description: "Đã xuất cài đặt",
+        });
+      }
+    } catch (error) {
+      console.error("Error exporting settings:", error);
+      toast({
+        title: "Lỗi",
+        description: "Không thể xuất cài đặt",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle theme change with immediate preview (but not saved until user clicks save)
+  const handleThemeChange = (newTheme: "light" | "dark" | "auto") => {
+    console.log("handleThemeChange called with:", newTheme);
+    setGeneralSettings((prev) => ({ ...prev, theme: newTheme }));
+    // Apply theme immediately for preview, but don't persist to localStorage yet
+    setTheme(newTheme, false);
+  };
+
+  const handleDateFormatChange = (format: string) => {
+    setGeneralSettings((prev) => ({ ...prev, date_format: format }));
+    localStorage.setItem("dateFormat", format);
+  };
+
+  const handleTimezoneChange = (timezone: string) => {
+    setGeneralSettings((prev) => ({ ...prev, timezone }));
+    localStorage.setItem("timezone", timezone);
+
+    // Show immediate feedback
+    toast({
+      title: "Múi giờ đã thay đổi",
+      description: `Đã chuyển sang ${
+        timezone === "Asia/Ho_Chi_Minh" ? "GMT+7 (Việt Nam)" : "UTC"
+      }`,
+    });
+  };
+
+  // Handle security settings changes with immediate feedback
+  const handleSecurityChange = (key: string, value: any) => {
+    setSecuritySettings((prev) => ({ ...prev, [key]: value }));
+
+    // Show immediate feedback for important changes
+    if (key === "two_factor_enabled") {
+      toast({
+        title: value ? "🔐 2FA đã bật" : "🔓 2FA đã tắt",
+        description: value
+          ? "Xác thực hai yếu tố đã được kích hoạt"
+          : "Xác thực hai yếu tố đã được tắt",
+      });
+    }
+  };
+
+  // Handle notification settings changes with immediate feedback
+  const handleNotificationChange = (key: string, value: any) => {
+    setNotificationSettings((prev) => ({ ...prev, [key]: value }));
+
+    // Show immediate feedback for important changes
+    if (key === "email_enabled") {
+      toast({
+        title: value ? "📧 Email đã bật" : "📧 Email đã tắt",
+        description: value
+          ? "Thông báo email đã được kích hoạt"
+          : "Thông báo email đã được tắt",
+      });
+    } else if (key === "push_enabled") {
+      toast({
+        title: value ? "🔔 Push đã bật" : "🔔 Push đã tắt",
+        description: value
+          ? "Thông báo đẩy đã được kích hoạt"
+          : "Thông báo đẩy đã được tắt",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="layout-container bg-background">
+        <Sidebar />
+        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+          <Header />
+          <main className="p-6">
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">{texts.loading || "Đang tải..."}</span>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="layout-container bg-background">
@@ -116,20 +480,34 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground">
-                Cài đặt hệ thống
+                {texts.system_settings || "Cài đặt hệ thống"}
               </h1>
               <p className="text-muted-foreground mt-2">
                 Cấu hình và quản lý hệ thống quản lý hợp đồng
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline">
+              <Button
+                variant="outline"
+                onClick={exportSettings}
+                disabled={saving}
+              >
                 <Download className="h-4 w-4 mr-2" />
-                Xuất cấu hình
+                {texts.export_settings || "Xuất cấu hình"}
               </Button>
-              <Button>
-                <Upload className="h-4 w-4 mr-2" />
-                Nhập cấu hình
+              <Button
+                onClick={() => {
+                  console.log("Save All button clicked");
+                  saveAllSettings();
+                }}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                {texts.save_all || "Lưu tất cả"}
               </Button>
             </div>
           </div>
@@ -193,93 +571,136 @@ export default function SettingsPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="orgName">Tên tổ chức</Label>
-                      <Input id="orgName" defaultValue="Sở Xây dựng Hà Nội" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="orgCode">Mã tổ chức</Label>
-                      <Input id="orgCode" defaultValue="SXD-HN-001" />
+                      <Input
+                        id="orgName"
+                        value={generalSettings.company_name}
+                        onChange={(e) =>
+                          setGeneralSettings((prev) => ({
+                            ...prev,
+                            company_name: e.target.value,
+                          }))
+                        }
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="orgAddress">Địa chỉ</Label>
                       <Textarea
                         id="orgAddress"
-                        defaultValue="Số 1 Phạm Ngũ Lão, Hoàn Kiếm, Hà Nội"
+                        value={generalSettings.company_address}
+                        onChange={(e) =>
+                          setGeneralSettings((prev) => ({
+                            ...prev,
+                            company_address: e.target.value,
+                          }))
+                        }
                         rows={2}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="orgPhone">Điện thoại</Label>
-                        <Input id="orgPhone" defaultValue="024-3825-1234" />
+                        <Input
+                          id="orgPhone"
+                          value={generalSettings.company_phone}
+                          onChange={(e) =>
+                            setGeneralSettings((prev) => ({
+                              ...prev,
+                              company_phone: e.target.value,
+                            }))
+                          }
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="orgEmail">Email</Label>
                         <Input
                           id="orgEmail"
-                          defaultValue="info@sxd.hanoi.gov.vn"
+                          value={generalSettings.company_email}
+                          onChange={(e) =>
+                            setGeneralSettings((prev) => ({
+                              ...prev,
+                              company_email: e.target.value,
+                            }))
+                          }
                         />
                       </div>
                     </div>
+                    <Button
+                      onClick={() => {
+                        console.log("Save General Settings button clicked");
+                        saveSettings("general", generalSettings);
+                      }}
+                      disabled={saving}
+                      className="w-full"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
+                      Lưu cài đặt chung
+                    </Button>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Cài đặt giao diện</CardTitle>
+                    <CardTitle>{texts.general_settings}</CardTitle>
                     <CardDescription>
                       Tùy chỉnh giao diện người dùng
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="theme">Chủ đề</Label>
-                      <Select defaultValue="light">
+                      <Label htmlFor="theme">{texts.theme}</Label>
+                      <Select
+                        value={generalSettings.theme}
+                        onValueChange={handleThemeChange}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="light">Sáng</SelectItem>
-                          <SelectItem value="dark">Tối</SelectItem>
-                          <SelectItem value="auto">Tự động</SelectItem>
+                          <SelectItem value="light">
+                            {texts.light_mode}
+                          </SelectItem>
+                          <SelectItem value="dark">
+                            {texts.dark_mode}
+                          </SelectItem>
+                          <SelectItem value="auto">
+                            {texts.auto_mode}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="language">Ngôn ngữ</Label>
-                      <Select defaultValue="vi">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vi">Tiếng Việt</SelectItem>
-                          <SelectItem value="en">English</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="timezone">Múi giờ</Label>
-                      <Select defaultValue="asia/ho_chi_minh">
+                      <Select
+                        value={generalSettings.timezone}
+                        onValueChange={handleTimezoneChange}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="asia/ho_chi_minh">
+                          <SelectItem value="Asia/Ho_Chi_Minh">
                             GMT+7 (Việt Nam)
                           </SelectItem>
-                          <SelectItem value="utc">UTC</SelectItem>
+                          <SelectItem value="UTC">UTC</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="dateFormat">Định dạng ngày</Label>
-                      <Select defaultValue="dd/mm/yyyy">
+                      <Select
+                        value={generalSettings.date_format}
+                        onValueChange={handleDateFormatChange}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="dd/mm/yyyy">DD/MM/YYYY</SelectItem>
-                          <SelectItem value="mm/dd/yyyy">MM/DD/YYYY</SelectItem>
-                          <SelectItem value="yyyy-mm-dd">YYYY-MM-DD</SelectItem>
+                          <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                          <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                          <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -369,9 +790,9 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={security.twoFactor}
+                        checked={securitySettings.two_factor_enabled}
                         onCheckedChange={(checked) =>
-                          setSecurity({ ...security, twoFactor: checked })
+                          handleSecurityChange("two_factor_enabled", checked)
                         }
                       />
                     </div>
@@ -383,11 +804,11 @@ export default function SettingsPage() {
                       <Input
                         id="sessionTimeout"
                         type="number"
-                        value={security.sessionTimeout}
+                        value={securitySettings.session_timeout}
                         onChange={(e) =>
-                          setSecurity({
-                            ...security,
-                            sessionTimeout: e.target.value,
+                          setSecuritySettings({
+                            ...securitySettings,
+                            session_timeout: parseInt(e.target.value),
                           })
                         }
                       />
@@ -399,11 +820,11 @@ export default function SettingsPage() {
                       <Input
                         id="passwordExpiry"
                         type="number"
-                        value={security.passwordExpiry}
+                        value={securitySettings.password_expiry_days}
                         onChange={(e) =>
-                          setSecurity({
-                            ...security,
-                            passwordExpiry: e.target.value,
+                          setSecuritySettings({
+                            ...securitySettings,
+                            password_expiry_days: parseInt(e.target.value),
                           })
                         }
                       />
@@ -415,15 +836,25 @@ export default function SettingsPage() {
                       <Input
                         id="loginAttempts"
                         type="number"
-                        value={security.loginAttempts}
+                        value={securitySettings.max_login_attempts}
                         onChange={(e) =>
-                          setSecurity({
-                            ...security,
-                            loginAttempts: e.target.value,
+                          setSecuritySettings({
+                            ...securitySettings,
+                            max_login_attempts: parseInt(e.target.value),
                           })
                         }
                       />
                     </div>
+                    <Button
+                      onClick={() => saveSettings("security", securitySettings)}
+                      disabled={saving}
+                      className="w-full"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
+                      Lưu cài đặt bảo mật
+                    </Button>
                   </CardContent>
                 </Card>
 
@@ -521,9 +952,9 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.email}
+                        checked={notificationSettings.email_enabled}
                         onCheckedChange={(checked) =>
-                          setNotifications({ ...notifications, email: checked })
+                          handleNotificationChange("email_enabled", checked)
                         }
                       />
                     </div>
@@ -535,9 +966,12 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.sms}
+                        checked={notificationSettings.sms_enabled}
                         onCheckedChange={(checked) =>
-                          setNotifications({ ...notifications, sms: checked })
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            sms_enabled: checked,
+                          })
                         }
                       />
                     </div>
@@ -549,9 +983,9 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.push}
+                        checked={notificationSettings.push_enabled}
                         onCheckedChange={(checked) =>
-                          setNotifications({ ...notifications, push: checked })
+                          handleNotificationChange("push_enabled", checked)
                         }
                       />
                     </div>
@@ -574,11 +1008,11 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.contractExpiry}
+                        checked={notificationSettings.contract_expiry_reminder}
                         onCheckedChange={(checked) =>
-                          setNotifications({
-                            ...notifications,
-                            contractExpiry: checked,
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            contract_expiry_reminder: checked,
                           })
                         }
                       />
@@ -591,11 +1025,11 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.paymentDue}
+                        checked={notificationSettings.payment_due_reminder}
                         onCheckedChange={(checked) =>
-                          setNotifications({
-                            ...notifications,
-                            paymentDue: checked,
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            payment_due_reminder: checked,
                           })
                         }
                       />
@@ -608,15 +1042,27 @@ export default function SettingsPage() {
                         </p>
                       </div>
                       <Switch
-                        checked={notifications.approvalRequired}
+                        checked={notificationSettings.approval_required_alert}
                         onCheckedChange={(checked) =>
-                          setNotifications({
-                            ...notifications,
-                            approvalRequired: checked,
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            approval_required_alert: checked,
                           })
                         }
                       />
                     </div>
+                    <Button
+                      onClick={() =>
+                        saveSettings("notifications", notificationSettings)
+                      }
+                      disabled={saving}
+                      className="w-full"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
+                      Lưu cài đặt thông báo
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
@@ -630,11 +1076,30 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="smtpHost">SMTP Host</Label>
-                      <Input id="smtpHost" defaultValue="smtp.gov.vn" />
+                      <Input
+                        id="smtpHost"
+                        value={notificationSettings.email_smtp_host}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            email_smtp_host: e.target.value,
+                          }))
+                        }
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="smtpPort">SMTP Port</Label>
-                      <Input id="smtpPort" type="number" defaultValue="587" />
+                      <Input
+                        id="smtpPort"
+                        type="number"
+                        value={notificationSettings.email_smtp_port}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            email_smtp_port: parseInt(e.target.value),
+                          }))
+                        }
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -642,7 +1107,13 @@ export default function SettingsPage() {
                       <Label htmlFor="smtpUser">Username</Label>
                       <Input
                         id="smtpUser"
-                        defaultValue="system@sxd.hanoi.gov.vn"
+                        value={notificationSettings.email_from_address}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            email_from_address: e.target.value,
+                          }))
+                        }
                       />
                     </div>
                     <div className="space-y-2">
@@ -655,7 +1126,16 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Switch id="smtpTls" defaultChecked />
+                    <Switch
+                      id="smtpTls"
+                      checked={notificationSettings.email_smtp_secure}
+                      onCheckedChange={(checked) =>
+                        setNotificationSettings((prev) => ({
+                          ...prev,
+                          email_smtp_secure: checked,
+                        }))
+                      }
+                    />
                     <Label htmlFor="smtpTls">Sử dụng TLS</Label>
                   </div>
                 </CardContent>
@@ -673,7 +1153,7 @@ export default function SettingsPage() {
                         Cấu hình các cấp phê duyệt theo giá trị hợp đồng
                       </CardDescription>
                     </div>
-                    <Button onClick={addApprovalLevel} size="sm">
+                    <Button onClick={() => {}} size="sm">
                       <Plus className="h-4 w-4 mr-2" />
                       Thêm cấp
                     </Button>
@@ -681,19 +1161,40 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {approvalWorkflow.map((level, index) => (
+                    {[
+                      {
+                        level: 1,
+                        role: "Trưởng phòng",
+                        minAmount: 0,
+                        maxAmount: 100000000,
+                      },
+                      {
+                        level: 2,
+                        role: "Phó giám đốc",
+                        minAmount: 100000000,
+                        maxAmount: 500000000,
+                      },
+                      {
+                        level: 3,
+                        role: "Giám đốc",
+                        minAmount: 500000000,
+                        maxAmount: 1000000000,
+                      },
+                      {
+                        level: 4,
+                        role: "Hội đồng quản trị",
+                        minAmount: 1000000000,
+                        maxAmount: null,
+                      },
+                    ].map((level, index) => (
                       <div
                         key={index}
                         className="p-4 border rounded-lg space-y-3"
                       >
                         <div className="flex items-center justify-between">
                           <h4 className="font-medium">Cấp {level.level}</h4>
-                          {approvalWorkflow.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeApprovalLevel(index)}
-                            >
+                          {index > 0 && (
+                            <Button variant="ghost" size="sm">
                               <X className="h-4 w-4" />
                             </Button>
                           )}
@@ -701,28 +1202,14 @@ export default function SettingsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div className="space-y-2">
                             <Label>Vai trò</Label>
-                            <Input
-                              value={level.role}
-                              onChange={(e) => {
-                                const newWorkflow = [...approvalWorkflow];
-                                newWorkflow[index].role = e.target.value;
-                                setApprovalWorkflow(newWorkflow);
-                              }}
-                              placeholder="Nhập vai trò"
-                            />
+                            <Input value={level.role} readOnly />
                           </div>
                           <div className="space-y-2">
                             <Label>Giá trị tối thiểu (VNĐ)</Label>
                             <Input
                               type="number"
                               value={level.minAmount}
-                              onChange={(e) => {
-                                const newWorkflow = [...approvalWorkflow];
-                                newWorkflow[index].minAmount = Number.parseInt(
-                                  e.target.value
-                                );
-                                setApprovalWorkflow(newWorkflow);
-                              }}
+                              readOnly
                             />
                           </div>
                           <div className="space-y-2">
@@ -730,14 +1217,8 @@ export default function SettingsPage() {
                             <Input
                               type="number"
                               value={level.maxAmount || ""}
-                              onChange={(e) => {
-                                const newWorkflow = [...approvalWorkflow];
-                                newWorkflow[index].maxAmount = e.target.value
-                                  ? Number.parseInt(e.target.value)
-                                  : null;
-                                setApprovalWorkflow(newWorkflow);
-                              }}
                               placeholder="Không giới hạn"
+                              readOnly
                             />
                           </div>
                         </div>
@@ -800,12 +1281,7 @@ export default function SettingsPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="network">Loại mạng</Label>
-                      <Select
-                        value={blockchain.network}
-                        onValueChange={(value) =>
-                          setBlockchain({ ...blockchain, network: value })
-                        }
-                      >
+                      <Select defaultValue="hyperledger">
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -824,27 +1300,12 @@ export default function SettingsPage() {
                       <Label htmlFor="nodeUrl">URL Node</Label>
                       <Input
                         id="nodeUrl"
-                        value={blockchain.nodeUrl}
-                        onChange={(e) =>
-                          setBlockchain({
-                            ...blockchain,
-                            nodeUrl: e.target.value,
-                          })
-                        }
+                        defaultValue="https://blockchain-node.gov.vn"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="gasLimit">Gas Limit</Label>
-                      <Input
-                        id="gasLimit"
-                        value={blockchain.gasLimit}
-                        onChange={(e) =>
-                          setBlockchain({
-                            ...blockchain,
-                            gasLimit: e.target.value,
-                          })
-                        }
-                      />
+                      <Input id="gasLimit" defaultValue="100000" />
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
@@ -853,12 +1314,7 @@ export default function SettingsPage() {
                           Đồng bộ dữ liệu tự động với blockchain
                         </p>
                       </div>
-                      <Switch
-                        checked={blockchain.autoSync}
-                        onCheckedChange={(checked) =>
-                          setBlockchain({ ...blockchain, autoSync: checked })
-                        }
-                      />
+                      <Switch defaultChecked />
                     </div>
                   </CardContent>
                 </Card>
@@ -1122,8 +1578,21 @@ export default function SettingsPage() {
 
           {/* Save Button */}
           <div className="flex justify-end space-x-4 pt-6 border-t">
-            <Button variant="outline">Khôi phục mặc định</Button>
-            <Button>Lưu cài đặt</Button>
+            <Button variant="outline" onClick={loadSettings} disabled={saving}>
+              Khôi phục
+            </Button>
+            <Button
+              onClick={() => {
+                console.log("Save All Settings button clicked");
+                saveAllSettings();
+              }}
+              disabled={saving}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Lưu tất cả cài đặt
+            </Button>
           </div>
         </main>
       </div>

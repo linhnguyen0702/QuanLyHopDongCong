@@ -160,14 +160,17 @@ router.post("/register", validateRegistration, async (req, res) => {
 
 // Login
 router.post("/login", validateLogin, async (req, res) => {
+  console.log("🔐 Login attempt:", req.body);
   try {
     const { email, password } = req.body;
 
+    console.log("📊 Searching for user:", email);
     // Find user với đầy đủ thông tin
     const [users] = await pool.execute(
       "SELECT id, full_name, email, password, company, role, department, phone, is_active, created_at, updated_at FROM users WHERE email = ?",
       [email]
     );
+    console.log("👤 Users found:", users.length);
 
     if (users.length === 0) {
       return res.status(401).json({
@@ -224,10 +227,12 @@ router.post("/login", validateLogin, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("❌ Login error:", error);
+    console.error("❌ Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      ...(process.env.NODE_ENV !== "production" && { error: error.message }),
     });
   }
 });
@@ -564,6 +569,199 @@ router.put("/profile-update-google", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
+    });
+  }
+});
+
+// Forgot Password - Send OTP
+router.post("/forgot-password", async (req, res) => {
+  console.log("🔍 Forgot password endpoint hit");
+
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập email",
+      });
+    }
+
+    // Check if user exists
+    const [users] = await pool.execute(
+      "SELECT id, full_name FROM users WHERE email = ?",
+      [email]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy tài khoản với email này",
+      });
+    }
+
+    // Import sendOTP function
+    const { sendOTP } = require("../utils/sendOtp.js");
+
+    // Send OTP
+    const otp = await sendOTP(email);
+
+    // Store OTP in database with expiration time (5 minutes)
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+
+    // Check if there's already an OTP for this email
+    const [existingOTP] = await pool.execute(
+      "SELECT id FROM password_reset_otps WHERE email = ?",
+      [email]
+    );
+
+    if (existingOTP.length > 0) {
+      // Update existing OTP
+      await pool.execute(
+        "UPDATE password_reset_otps SET otp = ?, expires_at = ?, created_at = NOW() WHERE email = ?",
+        [otp, expiresAt, email]
+      );
+    } else {
+      // Insert new OTP
+      await pool.execute(
+        "INSERT INTO password_reset_otps (email, otp, expires_at, created_at) VALUES (?, ?, ?, NOW())",
+        [email, otp, expiresAt]
+      );
+    }
+
+    // Log audit
+    try {
+      await pool.execute(
+        "INSERT INTO audit_logs (table_name, record_id, action, user_id, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+        [
+          "password_reset_otps",
+          users[0].id,
+          "FORGOT_PASSWORD_REQUEST",
+          users[0].id,
+          req.ip,
+          req.get("User-Agent"),
+        ]
+      );
+    } catch (auditError) {
+      console.log("Audit log failed:", auditError.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Mã OTP đã được gửi đến email của bạn. Mã có hiệu lực trong 5 phút.",
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi gửi OTP. Vui lòng thử lại sau.",
+    });
+  }
+});
+
+// Verify OTP and Reset Password
+router.post("/reset-password", async (req, res) => {
+  console.log("🔍 Reset password endpoint hit");
+
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ thông tin",
+      });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu phải có ít nhất 8 ký tự",
+      });
+    }
+
+    // Check OTP validity
+    const [otpRecords] = await pool.execute(
+      "SELECT id, expires_at FROM password_reset_otps WHERE email = ? AND otp = ?",
+      [email, otp]
+    );
+
+    if (otpRecords.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Mã OTP không hợp lệ",
+      });
+    }
+
+    // Check if OTP has expired
+    const otpRecord = otpRecords[0];
+    if (new Date() > new Date(otpRecord.expires_at)) {
+      // Delete expired OTP
+      await pool.execute("DELETE FROM password_reset_otps WHERE id = ?", [
+        otpRecord.id,
+      ]);
+
+      return res.status(400).json({
+        success: false,
+        message: "Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.",
+      });
+    }
+
+    // Check if user exists
+    const [users] = await pool.execute("SELECT id FROM users WHERE email = ?", [
+      email,
+    ]);
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy tài khoản",
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    await pool.execute(
+      "UPDATE users SET password = ?, updated_at = NOW() WHERE email = ?",
+      [hashedPassword, email]
+    );
+
+    // Delete used OTP
+    await pool.execute("DELETE FROM password_reset_otps WHERE id = ?", [
+      otpRecord.id,
+    ]);
+
+    // Log audit
+    try {
+      await pool.execute(
+        "INSERT INTO audit_logs (table_name, record_id, action, user_id, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+        [
+          "users",
+          users[0].id,
+          "PASSWORD_RESET",
+          users[0].id,
+          req.ip,
+          req.get("User-Agent"),
+        ]
+      );
+    } catch (auditError) {
+      console.log("Audit log failed:", auditError.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Mật khẩu đã được cập nhật thành công",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi đặt lại mật khẩu. Vui lòng thử lại sau.",
     });
   }
 });

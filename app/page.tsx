@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth-guard";
 import { useSidebar } from "@/hooks/use-sidebar";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 import {
@@ -41,6 +42,7 @@ import { ContractorForm } from "@/components/contractor-form";
 export default function Dashboard() {
   const router = useRouter();
   const { collapsed } = useSidebar();
+  const { user } = useAuth();
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isContractorDialogOpen, setIsContractorDialogOpen] = useState(false);
 
@@ -62,11 +64,16 @@ export default function Dashboard() {
 
   return (
     <AuthGuard>
-      <div className="layout-container bg-background">
+      <div className="layout-container bg-background text-foreground">
         <Sidebar />
-        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+        <div
+          className={cn(
+            "main-content bg-background text-foreground",
+            collapsed && "sidebar-collapsed"
+          )}
+        >
           <Header />
-          <main className="p-6">
+          <main className="p-6 bg-background text-foreground">
             {/* Page Header */}
             <div className="flex items-center justify-between mb-8">
               <div>
@@ -266,14 +273,19 @@ export default function Dashboard() {
                       <Building2 className="h-4 w-4 mr-2" />
                       Thêm nhà thầu
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start bg-transparent hover:bg-muted"
-                      onClick={handleApproveContracts}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Phê duyệt hợp đồng
-                    </Button>
+                    {/* Chỉ hiển thị nút Phê duyệt cho admin, manager và approver */}
+                    {(user?.role === "admin" ||
+                      user?.role === "manager" ||
+                      user?.role === "approver") && (
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start bg-transparent hover:bg-muted"
+                        onClick={handleApproveContracts}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Phê duyệt hợp đồng
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
 

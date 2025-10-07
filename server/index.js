@@ -110,6 +110,7 @@ const reportRoutes = require("./routes/reports");
 const auditRoutes = require("./routes/audit");
 const approvalRoutes = require("./routes/approvals"); // Import approval routes
 const adminRoutes = require("./routes/admin"); // Import admin routes
+const settingsRoutes = require("./routes/settings"); // Import settings routes
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -123,6 +124,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/approvals", approvalRoutes); // Add approval routes
 app.use("/api/admin", adminRoutes); // Add admin routes (development only)
+app.use("/api/settings", settingsRoutes); // Add settings routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {

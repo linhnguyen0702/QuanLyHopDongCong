@@ -411,3 +411,40 @@ export const usersApi = {
 
   getDashboardStats: () => apiClient.get("/users/dashboard/stats"),
 };
+
+// Settings API
+export const settingsApi = {
+  // Get all settings grouped by category
+  getAll: () => apiClient.get("/settings"),
+
+  // Get settings by category
+  getByCategory: (category: string) => apiClient.get(`/settings/${category}`),
+
+  // Update settings by category
+  updateCategory: (category: string, settings: Record<string, any>) =>
+    apiClient.put(`/settings/${category}`, settings),
+
+  // Update multiple settings across categories
+  updateMultiple: (settings: Record<string, Record<string, any>>) =>
+    apiClient.put("/settings", settings),
+
+  // Export all settings
+  export: () => apiClient.get("/settings/export"),
+
+  // Import settings from file
+  import: (settingsData: any) =>
+    apiClient.post("/settings/import", settingsData),
+
+  // Get settings change audit log
+  getAudit: (params?: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    setting_key?: string;
+    changed_by?: number;
+  }) => apiClient.get("/settings/audit", params),
+
+  // Reset category settings to default
+  resetCategory: (category: string) =>
+    apiClient.put(`/settings/reset/${category}`),
+};

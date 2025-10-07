@@ -90,11 +90,15 @@
     margin-left: 16rem; /* 256px - width của sidebar expanded */
     transition: margin-left 0.3s ease;
     width: calc(100vw - 16rem);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
   .main-content.sidebar-collapsed {
     margin-left: 4rem; /* 64px - width của sidebar collapsed */
     width: calc(100vw - 4rem);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
   /* Responsive design cho mobile */

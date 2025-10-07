@@ -63,6 +63,7 @@
     "next-auth": "^4.24.11",
     "next-themes": "latest",
     "node-fetch": "^2.6.7",
+    "nodemailer": "^6.10.1",
     "path": "latest",
     "react": "^19",
     "react-day-picker": "latest",
