@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth-guard";
@@ -29,6 +29,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { contractsApi, contractorsApi } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,16 @@ export default function Dashboard() {
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isContractorDialogOpen, setIsContractorDialogOpen] = useState(false);
 
+  // Real data states
+  const [totalContracts, setTotalContracts] = useState<number | null>(null);
+  const [totalContractValue, setTotalContractValue] = useState<number | null>(null);
+  const [avgProgress, setAvgProgress] = useState<number | null>(null);
+  const [expiringCount, setExpiringCount] = useState<number | null>(null);
+  const [overdueCount, setOverdueCount] = useState<number | null>(null);
+  const [contractorsTotal, setContractorsTotal] = useState<number | null>(null);
+  const [recentContracts, setRecentContracts] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
   const handleCreateContract = () => {
     setIsContractDialogOpen(true);
   };
@@ -61,6 +72,56 @@ export default function Dashboard() {
   const handleViewContract = (contractId: string) => {
     router.push(`/contracts/${contractId}`);
   };
+
+  // Fetch dashboard data
+  useEffect(() => {
+    let mounted = true;
+
+    const loadData = async () => {
+      try {
+        const [statsRes, contractorsRes, recentRes] = await Promise.all([
+          contractsApi.getStats(),
+          contractorsApi.getAll({ page: 1, limit: 1 }),
+          contractsApi.getAll({ page: 1, limit: 3 }),
+        ]);
+
+        if (mounted) {
+          if (statsRes?.success && (statsRes as any).data) {
+            const data: any = (statsRes as any).data;
+            setTotalContracts(data.totalContracts ?? null);
+            setTotalContractValue(data.totalValue ?? null);
+            setAvgProgress(
+              typeof data.avgProgress === "number" ? data.avgProgress : null
+            );
+            setExpiringCount(data.expiringCount ?? null);
+            setOverdueCount(data.overdueCount ?? null);
+          }
+
+          if (contractorsRes?.success && (contractorsRes as any).data) {
+            const d: any = (contractorsRes as any).data;
+            const pagination = d?.pagination;
+            setContractorsTotal(
+              pagination?.total ?? (Array.isArray(d?.contractors) ? d.contractors.length : null)
+            );
+          }
+
+          if (recentRes?.success && (recentRes as any).data) {
+            const list: any = (recentRes as any).data?.contracts || (recentRes as any).data;
+            setRecentContracts(Array.isArray(list) ? list : []);
+          }
+        }
+      } catch (e) {
+        // keep graceful fallbacks
+      } finally {
+        mounted && setLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <AuthGuard>
@@ -106,7 +167,9 @@ export default function Dashboard() {
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">247</div>
+                  <div className="text-2xl font-bold">
+                    {totalContracts !== null ? totalContracts : "--"}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     <span className="text-green-600">+12%</span> so với tháng
                     trước
@@ -125,7 +188,9 @@ export default function Dashboard() {
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">89</div>
+                  <div className="text-2xl font-bold">
+                    {contractorsTotal !== null ? contractorsTotal : "--"}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     <span className="text-green-600">+3</span> nhà thầu mới
                   </p>
@@ -143,7 +208,11 @@ export default function Dashboard() {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">2.4B VNĐ</div>
+                  <div className="text-2xl font-bold">
+                    {totalContractValue !== null
+                      ? new Intl.NumberFormat("vi-VN").format(totalContractValue) + " VNĐ"
+                      : "--"}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     <span className="text-green-600">+8.2%</span> tăng trưởng
                   </p>
@@ -161,7 +230,9 @@ export default function Dashboard() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">94.2%</div>
+                  <div className="text-2xl font-bold">
+                    {avgProgress !== null ? `${avgProgress}%` : "--"}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Tỷ lệ hoàn thành đúng hạn
                   </p>
@@ -180,32 +251,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {[
-                      {
-                        id: "HD-2024-001",
-                        title: "Xây dựng cầu Nhật Tân 2",
-                        contractor: "Công ty TNHH ABC",
-                        value: "450M VNĐ",
-                        status: "active",
-                        progress: 75,
-                      },
-                      {
-                        id: "HD-2024-002",
-                        title: "Nâng cấp hệ thống điện",
-                        contractor: "Tập đoàn Điện lực XYZ",
-                        value: "280M VNĐ",
-                        status: "pending",
-                        progress: 45,
-                      },
-                      {
-                        id: "HD-2024-003",
-                        title: "Xây dựng trường học",
-                        contractor: "Công ty Xây dựng DEF",
-                        value: "320M VNĐ",
-                        status: "completed",
-                        progress: 100,
-                      },
-                    ].map((contract) => (
+                    {recentContracts.map((contract: any) => (
                       <div
                         key={contract.id}
                         className="flex items-center justify-between p-4 border border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
@@ -231,20 +277,23 @@ export default function Dashboard() {
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mb-2">
-                            {contract.contractor} • {contract.value}
+                            {(contract.contractor_name || "").toString()} • {new Intl.NumberFormat("vi-VN").format(contract.value || 0)} VNĐ
                           </p>
                           <div className="flex items-center space-x-2">
                             <Progress
-                              value={contract.progress}
+                              value={Number(contract.progress) || 0}
                               className="flex-1"
                             />
                             <span className="text-xs text-muted-foreground">
-                              {contract.progress}%
+                              {Number(contract.progress) || 0}%
                             </span>
                           </div>
                         </div>
                       </div>
                     ))}
+                    {!loading && recentContracts.length === 0 && (
+                      <div className="text-sm text-muted-foreground">Chưa có hợp đồng nào.</div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -302,7 +351,7 @@ export default function Dashboard() {
                       <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-yellow-800">
-                          3 hợp đồng sắp hết hạn
+                          {expiringCount !== null ? expiringCount : "--"} hợp đồng sắp hết hạn
                         </p>
                         <p className="text-xs text-yellow-600">
                           Cần gia hạn trong 7 ngày tới
@@ -317,7 +366,7 @@ export default function Dashboard() {
                       <Clock className="h-4 w-4 text-red-600 mt-0.5" />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-red-800">
-                          2 thanh toán quá hạn
+                          {overdueCount !== null ? overdueCount : "--"} thanh toán quá hạn
                         </p>
                         <p className="text-xs text-red-600">Cần xử lý ngay</p>
                       </div>

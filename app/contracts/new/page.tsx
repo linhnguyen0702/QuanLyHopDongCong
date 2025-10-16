@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
@@ -35,16 +35,42 @@ import { CalendarIcon, ArrowLeft, Upload, Plus, X } from "lucide-react";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { contractsApi, contractorsApi } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export default function NewContractPage() {
   const router = useRouter();
   const { collapsed } = useSidebar();
+  const { toast } = useToast();
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [attachments, setAttachments] = useState<string[]>([]);
   const [milestones, setMilestones] = useState([
     { name: "", description: "", deadline: "", value: "" },
   ]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contractNumber, setContractNumber] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [value, setValue] = useState("");
+  const [contractorId, setContractorId] = useState<number | undefined>();
+  const [contractors, setContractors] = useState<Array<{ id: number; name: string }>>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadContractors = async () => {
+      const res = await contractorsApi.getAll({ page: 1, limit: 100, status: "" as any });
+      if (mounted && res?.success) {
+        const data: any = (res as any).data;
+        const list = data?.contractors || data || [];
+        setContractors(list.map((c: any) => ({ id: c.id, name: c.name })));
+      }
+    };
+    loadContractors();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const addMilestone = () => {
     setMilestones([
@@ -65,11 +91,37 @@ export default function NewContractPage() {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log("Form submitted");
-    router.push("/contracts");
+    if (isSubmitting) return;
+    if (!contractorId || !startDate || !endDate) {
+      toast({ title: "Thiếu thông tin", description: "Vui lòng chọn nhà thầu và ngày bắt đầu/kết thúc" });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        contractNumber: contractNumber.trim(),
+        title: title.trim(),
+        description: description.trim() || undefined,
+        contractorId,
+        value: Number(value) || 0,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+      };
+
+      const res = await contractsApi.create(payload);
+      if (res?.success) {
+        toast({ title: "Thành công", description: "Đã tạo hợp đồng" });
+        router.push("/contracts");
+      } else {
+        toast({ title: "Lỗi", description: (res as any)?.message || "Không thể tạo hợp đồng" });
+      }
+    } catch (err) {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra khi tạo hợp đồng" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -119,6 +171,8 @@ export default function NewContractPage() {
                         <Input
                           id="contractId"
                           placeholder="HĐ-2024-XXX"
+                          value={contractNumber}
+                          onChange={(e) => setContractNumber(e.target.value)}
                           required
                         />
                       </div>
@@ -148,6 +202,8 @@ export default function NewContractPage() {
                       <Input
                         id="title"
                         placeholder="Nhập tên hợp đồng"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
                         required
                       />
                     </div>
@@ -157,6 +213,8 @@ export default function NewContractPage() {
                       <Textarea
                         id="description"
                         placeholder="Mô tả chi tiết về nội dung hợp đồng"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
                         rows={4}
                       />
                     </div>
@@ -241,6 +299,8 @@ export default function NewContractPage() {
                           id="totalValue"
                           type="number"
                           placeholder="0"
+                          value={value}
+                          onChange={(e) => setValue(e.target.value)}
                           required
                         />
                       </div>
@@ -389,16 +449,14 @@ export default function NewContractPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="contractor">Nhà thầu *</Label>
-                      <Select required>
+                      <Select required value={contractorId ? String(contractorId) : undefined} onValueChange={(v) => setContractorId(Number(v))}>
                         <SelectTrigger>
                           <SelectValue placeholder="Chọn nhà thầu" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="abc">Công ty TNHH ABC</SelectItem>
-                          <SelectItem value="xyz">Tập đoàn XYZ</SelectItem>
-                          <SelectItem value="def">
-                            Công ty Xây dựng DEF
-                          </SelectItem>
+                          {contractors.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -523,8 +581,8 @@ export default function NewContractPage() {
                 <Card>
                   <CardContent className="pt-6">
                     <div className="space-y-3">
-                      <Button type="submit" className="w-full">
-                        Tạo hợp đồng
+                      <Button type="submit" className="w-full bg-[#7C3AED] hover:bg-[#7C3AED]/90" disabled={isSubmitting}>
+                        {isSubmitting ? "Đang xử lý..." : "Tạo hợp đồng"}
                       </Button>
                       <Button
                         type="button"

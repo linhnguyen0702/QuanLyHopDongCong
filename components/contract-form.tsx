@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,38 +16,100 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { contractsApi, contractorsApi } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 
 interface ContractFormProps {
   onClose: () => void
   contract?: any
+  onSuccess?: (createdOrUpdated?: any) => void
 }
 
-export function ContractForm({ onClose, contract }: ContractFormProps) {
+export function ContractForm({ onClose, contract, onSuccess }: ContractFormProps) {
   const [formData, setFormData] = useState({
+    contractNumber: contract?.contract_number || "",
     title: contract?.title || "",
     description: contract?.description || "",
-    contractor: contract?.contractor || "",
+    contractorId: contract?.contractor_id as number | undefined,
     category: contract?.category || "",
-    value: contract?.value || "",
-    startDate: contract?.startDate ? new Date(contract.startDate) : undefined,
-    endDate: contract?.endDate ? new Date(contract.endDate) : undefined,
+    value: contract?.value ? String(contract.value) : "",
+    startDate: contract?.start_date ? new Date(contract.start_date) : undefined,
+    endDate: contract?.end_date ? new Date(contract.end_date) : undefined,
     paymentTerms: contract?.paymentTerms || "",
     specifications: contract?.specifications || "",
     deliverables: contract?.deliverables || "",
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [contractors, setContractors] = useState<Array<{ id: number; name: string }>>([])
+  const { toast } = useToast()
+
+  useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      const res = await contractorsApi.getAll({ page: 1, limit: 100, status: "" as any })
+      if (mounted && res?.success) {
+        const data: any = (res as any).data
+        const list = data?.contractors || data || []
+        setContractors(list.map((c: any) => ({ id: c.id, name: c.name })))
+      }
+    }
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
+    if (!formData.contractNumber || !formData.title || !formData.contractorId || !formData.startDate || !formData.endDate) {
+      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập đủ mã HĐ, tên, nhà thầu và ngày bắt đầu/kết thúc" })
+      return
+    }
     setIsSubmitting(true)
-
-    // Simulate API call and blockchain transaction
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    console.log("Contract data:", formData)
-    setIsSubmitting(false)
-    onClose()
+    try {
+      if (contract?.id) {
+        const payload = {
+          title: formData.title.trim(),
+          description: formData.description?.trim() || undefined,
+          contractorId: Number(formData.contractorId),
+          value: Number(formData.value) || 0,
+          startDate: formData.startDate.toISOString().slice(0, 10),
+          endDate: formData.endDate.toISOString().slice(0, 10),
+        }
+        const res = await contractsApi.update(contract.id, payload)
+        if (res?.success) {
+          toast({ title: "Đã cập nhật", description: "Cập nhật hợp đồng thành công" })
+          onSuccess?.(res?.data)
+          onClose()
+        } else {
+          toast({ title: "Lỗi", description: (res as any)?.message || "Không thể cập nhật hợp đồng" })
+        }
+      } else {
+        const payload = {
+          contractNumber: formData.contractNumber.trim(),
+          title: formData.title.trim(),
+          description: formData.description?.trim() || undefined,
+          contractorId: Number(formData.contractorId),
+          value: Number(formData.value) || 0,
+          startDate: formData.startDate.toISOString().slice(0, 10),
+          endDate: formData.endDate.toISOString().slice(0, 10),
+        }
+        const res = await contractsApi.create(payload)
+        if (res?.success) {
+          toast({ title: "Thành công", description: "Đã tạo hợp đồng" })
+          onSuccess?.(res?.data)
+          onClose()
+        } else {
+          toast({ title: "Lỗi", description: (res as any)?.message || "Không thể tạo hợp đồng" })
+        }
+      }
+    } catch (err) {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra khi tạo hợp đồng" })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleInputChange = (field: string, value: any) => {
@@ -64,6 +126,17 @@ export function ContractForm({ onClose, contract }: ContractFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="contractNumber">Mã hợp đồng *</Label>
+              <Input
+                id="contractNumber"
+                value={formData.contractNumber}
+                onChange={(e) => handleInputChange("contractNumber", e.target.value)}
+                placeholder="HĐ-2025-XXX"
+                required
+                disabled={!!contract?.id}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="title">Tên dự án *</Label>
               <Input
@@ -106,13 +179,21 @@ export function ContractForm({ onClose, contract }: ContractFormProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="contractor">Nhà thầu *</Label>
-              <Input
-                id="contractor"
-                value={formData.contractor}
-                onChange={(e) => handleInputChange("contractor", e.target.value)}
-                placeholder="Tên công ty nhà thầu"
-                required
-              />
+              <Select
+                value={formData.contractorId ? String(formData.contractorId) : undefined}
+                onValueChange={(v) => handleInputChange("contractorId", Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn nhà thầu" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contractors.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="value">Giá trị hợp đồng (VNĐ) *</Label>
@@ -278,7 +359,7 @@ export function ContractForm({ onClose, contract }: ContractFormProps) {
         <Button type="button" variant="outline">
           Lưu nháp
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-secondary hover:bg-secondary/90">
+        <Button type="submit" disabled={isSubmitting} className="bg-[#7C3AED] hover:bg-[#7C3AED]/90">
           {isSubmitting ? "Đang xử lý..." : "Tạo hợp đồng"}
         </Button>
       </div>

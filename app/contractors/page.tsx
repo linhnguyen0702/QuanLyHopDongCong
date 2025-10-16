@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -57,126 +57,26 @@ import {
 } from "lucide-react";
 import { ContractorForm } from "@/components/contractor-form";
 import { ContractorDetails } from "@/components/contractor-details";
+import { contractorsApi } from "@/lib/api";
+import { AuthGuard } from "@/components/auth-guard";
 
-// Mock data for contractors
-const contractors = [
-  {
-    id: "CT-001",
-    name: "Công ty TNHH ABC Construction",
-    shortName: "ABC Construction",
-    taxCode: "0123456789",
-    address: "123 Đường Láng, Đống Đa, Hà Nội",
-    phone: "024-3456-7890",
-    email: "contact@abc-construction.vn",
-    website: "www.abc-construction.vn",
-    representative: "Nguyễn Văn A",
-    representativePosition: "Giám đốc",
-    establishedDate: "2010-05-15",
-    registrationNumber: "0123456789",
-    category: "Xây dựng",
-    specialization: [
-      "Xây dựng cầu đường",
-      "Công trình dân dụng",
-      "Hạ tầng kỹ thuật",
-    ],
-    status: "active",
-    rating: 4.8,
-    totalContracts: 15,
-    totalValue: 2500000000,
-    completedContracts: 12,
-    ongoingContracts: 3,
-    lastContractDate: "2024-01-15",
-    certifications: ["ISO 9001:2015", "ISO 14001:2015", "OHSAS 18001:2007"],
-    bankAccount: "1234567890",
-    bankName: "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
-  },
-  {
-    id: "CT-002",
-    name: "Tập đoàn Điện lực XYZ",
-    shortName: "XYZ Power",
-    taxCode: "0987654321",
-    address: "456 Phố Huế, Hai Bà Trưng, Hà Nội",
-    phone: "024-9876-5432",
-    email: "info@xyz-power.vn",
-    website: "www.xyz-power.vn",
-    representative: "Trần Thị B",
-    representativePosition: "Tổng Giám đốc",
-    establishedDate: "2008-03-20",
-    registrationNumber: "0987654321",
-    category: "Điện lực",
-    specialization: ["Hệ thống điện", "Năng lượng tái tạo", "Truyền tải điện"],
-    status: "active",
-    rating: 4.6,
-    totalContracts: 8,
-    totalValue: 1800000000,
-    completedContracts: 6,
-    ongoingContracts: 2,
-    lastContractDate: "2024-02-01",
-    certifications: ["ISO 9001:2015", "ISO 50001:2018"],
-    bankAccount: "0987654321",
-    bankName: "Ngân hàng TMCP Ngoại thương Việt Nam",
-  },
-  {
-    id: "CT-003",
-    name: "Công ty Xây dựng DEF",
-    shortName: "DEF Construction",
-    taxCode: "0456789123",
-    address: "789 Giải Phóng, Hoàng Mai, Hà Nội",
-    phone: "024-4567-8912",
-    email: "contact@def-construction.vn",
-    website: "www.def-construction.vn",
-    representative: "Lê Văn C",
-    representativePosition: "Giám đốc",
-    establishedDate: "2015-08-10",
-    registrationNumber: "0456789123",
-    category: "Xây dựng",
-    specialization: [
-      "Công trình giáo dục",
-      "Nhà ở xã hội",
-      "Công trình công cộng",
-    ],
-    status: "active",
-    rating: 4.5,
-    totalContracts: 6,
-    totalValue: 950000000,
-    completedContracts: 5,
-    ongoingContracts: 1,
-    lastContractDate: "2024-01-01",
-    certifications: ["ISO 9001:2015"],
-    bankAccount: "4567891230",
-    bankName: "Ngân hàng TMCP Công thương Việt Nam",
-  },
-  {
-    id: "CT-004",
-    name: "Công ty Cấp nước GHI",
-    shortName: "GHI Water",
-    taxCode: "0789123456",
-    address: "321 Nguyễn Trãi, Thanh Xuân, Hà Nội",
-    phone: "024-7891-2345",
-    email: "info@ghi-water.vn",
-    website: "www.ghi-water.vn",
-    representative: "Phạm Thị D",
-    representativePosition: "Giám đốc",
-    establishedDate: "2012-11-25",
-    registrationNumber: "0789123456",
-    category: "Hạ tầng",
-    specialization: [
-      "Hệ thống cấp nước",
-      "Xử lý nước thải",
-      "Hạ tầng kỹ thuật",
-    ],
-    status: "pending",
-    rating: 4.2,
-    totalContracts: 4,
-    totalValue: 720000000,
-    completedContracts: 3,
-    ongoingContracts: 1,
-    lastContractDate: "2024-03-01",
-    certifications: ["ISO 9001:2015", "ISO 14001:2015"],
-    bankAccount: "7891234560",
-    bankName: "Ngân hàng TMCP Á Châu",
-  },
-];
+type ContractorRow = {
+  id: number;
+  name: string;
+  contact_person?: string;
+  email: string;
+  phone: string;
+  address?: string;
+  tax_code?: string;
+  status?: string;
+  created_at?: string;
+  stats?: {
+    total_contracts: number;
+    active_contracts: number;
+    completed_contracts: number;
+    total_value: number;
+  };
+};
 
 export default function ContractorsPage() {
   const { collapsed } = useSidebar();
@@ -184,6 +84,33 @@ export default function ContractorsPage() {
   const [selectedContractor, setSelectedContractor] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [items, setItems] = useState<ContractorRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        // Lấy tất cả trạng thái: truyền status = "" để tránh default 'active' ở backend
+        const res = await contractorsApi.getAll({ page: 1, limit: 100, status: "" as any });
+        if (mounted && res?.success) {
+          const data: any = (res as any).data;
+          const list = data?.contractors || data || [];
+          setItems(Array.isArray(list) ? list : []);
+          setError("");
+        } else if (mounted) {
+          setError((res as any)?.message || "Không thể tải dữ liệu nhà thầu. Hãy đăng nhập lại.");
+        }
+      } finally {
+        mounted && setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -236,16 +163,48 @@ export default function ContractorsPage() {
     ));
   };
 
-  const filteredContractors = contractors.filter(
+  const filteredContractors = items.filter(
     (contractor) =>
-      contractor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contractor.shortName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contractor.taxCode.includes(searchTerm) ||
-      contractor.category.toLowerCase().includes(searchTerm.toLowerCase())
+      (contractor.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contractor.tax_code || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Derived stats based on available backend fields
+  const activeCount = items.filter((c) => (c.status || "active") === "active").length;
+  const totalContractValue = items.reduce((sum, c) => sum + (c.stats?.total_value || 0), 0);
+  const totalContracts = items.reduce((sum, c) => sum + (c.stats?.total_contracts || 0), 0);
+  const totalCompleted = items.reduce((sum, c) => sum + (c.stats?.completed_contracts || 0), 0);
+  const completionRate = totalContracts > 0 ? Math.round((totalCompleted / totalContracts) * 100) : 0;
+
+  const topByValue = [...items]
+    .sort((a: ContractorRow, b: ContractorRow) => (b.stats?.total_value || 0) - (a.stats?.total_value || 0))
+    .slice(0, 5);
+
+  const statusDistribution = items.reduce((acc: Record<string, number>, c) => {
+    const key = (c.status || "active").toString();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  if (loading) {
+    return (
+      <AuthGuard>
+        <div className="layout-container bg-background">
+          <Sidebar />
+          <div className={cn("main-content", collapsed && "sidebar-collapsed")}> 
+            <Header />
+            <main className="flex-1 p-6">
+              <div className="text-sm text-muted-foreground">Đang tải dữ liệu nhà thầu...</div>
+            </main>
+          </div>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   return (
-    <div className="layout-container bg-background">
+    <AuthGuard>
+      <div className="layout-container bg-background">
       <Sidebar />
       <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
@@ -320,11 +279,13 @@ export default function ContractorsPage() {
                 <CardHeader>
                   <CardTitle>Danh sách nhà thầu</CardTitle>
                   <CardDescription>
-                    Tổng cộng {filteredContractors.length} nhà thầu được tìm
-                    thấy
+                    Tổng cộng {filteredContractors.length} nhà thầu được tìm thấy
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {error && (
+                    <div className="mb-4 text-sm text-red-600">{error}</div>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -342,11 +303,9 @@ export default function ContractorsPage() {
                         <TableRow key={contractor.id}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">
-                                {contractor.shortName}
-                              </p>
+                              <p className="font-medium">{contractor.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {contractor.taxCode}
+                                {contractor.tax_code}
                               </p>
                             </div>
                           </TableCell>
@@ -367,30 +326,23 @@ export default function ContractorsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              {contractor.category}
-                            </Badge>
+                            <Badge variant="outline">—</Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center space-x-1">
-                              {getRatingStars(contractor.rating)}
-                              <span className="text-sm ml-1">
-                                {contractor.rating}
-                              </span>
-                            </div>
+                            <div className="flex items-center space-x-1">—</div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
                               <p className="font-medium">
-                                {contractor.totalContracts} hợp đồng
+                                {contractor.stats?.total_contracts || 0} hợp đồng
                               </p>
                               <p className="text-muted-foreground">
-                                {formatCurrency(contractor.totalValue)}
+                                {formatCurrency(contractor.stats?.total_value || 0)}
                               </p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            {getStatusBadge(contractor.status)}
+                            {getStatusBadge(contractor.status || "active")}
                           </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
@@ -446,16 +398,9 @@ export default function ContractorsPage() {
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
-                      {contractors.filter((c) => c.status === "active").length}
-                    </div>
+                    <div className="text-2xl font-bold">{activeCount}</div>
                     <p className="text-xs text-muted-foreground">
-                      {Math.round(
-                        (contractors.filter((c) => c.status === "active")
-                          .length /
-                          contractors.length) *
-                          100
-                      )}
+                      {items.length > 0 ? Math.round((activeCount / items.length) * 100) : 0}
                       % tổng số nhà thầu
                     </p>
                   </CardContent>
@@ -469,12 +414,7 @@ export default function ContractorsPage() {
                     <Star className="h-4 w-4 text-yellow-400" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
-                      {(
-                        contractors.reduce((sum, c) => sum + c.rating, 0) /
-                        contractors.length
-                      ).toFixed(1)}
-                    </div>
+                    <div className="text-2xl font-bold">—</div>
                     <p className="text-xs text-muted-foreground">
                       Trên thang điểm 5
                     </p>
@@ -489,11 +429,7 @@ export default function ContractorsPage() {
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
-                      {formatCurrency(
-                        contractors.reduce((sum, c) => sum + c.totalValue, 0)
-                      )}
-                    </div>
+                    <div className="text-2xl font-bold">{formatCurrency(totalContractValue)}</div>
                     <p className="text-xs text-muted-foreground">
                       Tổng giá trị hợp đồng
                     </p>
@@ -508,20 +444,7 @@ export default function ContractorsPage() {
                     <TrendingUp className="h-4 w-4 text-green-600" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-green-600">
-                      {Math.round(
-                        (contractors.reduce(
-                          (sum, c) => sum + c.completedContracts,
-                          0
-                        ) /
-                          contractors.reduce(
-                            (sum, c) => sum + c.totalContracts,
-                            0
-                          )) *
-                          100
-                      )}
-                      %
-                    </div>
+                    <div className="text-2xl font-bold text-green-600">{completionRate}%</div>
                     <p className="text-xs text-muted-foreground">
                       Hợp đồng hoàn thành
                     </p>
@@ -539,10 +462,7 @@ export default function ContractorsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {contractors
-                      .sort((a, b) => b.rating - a.rating)
-                      .slice(0, 5)
-                      .map((contractor, index) => (
+                    {topByValue.map((contractor: ContractorRow, index: number) => (
                         <div
                           key={contractor.id}
                           className="flex items-center justify-between p-4 border rounded-lg"
@@ -554,24 +474,17 @@ export default function ContractorsPage() {
                               </span>
                             </div>
                             <div>
-                              <p className="font-medium">
-                                {contractor.shortName}
-                              </p>
+                              <p className="font-medium">{contractor.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {contractor.category}
+                                —
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="flex items-center space-x-1 mb-1">
-                              {getRatingStars(contractor.rating)}
-                              <span className="text-sm ml-1">
-                                {contractor.rating}
-                              </span>
-                            </div>
+                            <div className="flex items-center space-x-1 mb-1">—</div>
                             <p className="text-sm text-muted-foreground">
-                              {contractor.completedContracts}/
-                              {contractor.totalContracts} hoàn thành
+                              {contractor.stats?.completed_contracts || 0}/
+                              {contractor.stats?.total_contracts || 0} hoàn thành
                             </p>
                           </div>
                         </div>
@@ -589,13 +502,7 @@ export default function ContractorsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {Object.entries(
-                      contractors.reduce((acc, contractor) => {
-                        acc[contractor.category] =
-                          (acc[contractor.category] || 0) + 1;
-                        return acc;
-                      }, {} as Record<string, number>)
-                    ).map(([category, count]) => (
+                    {Object.entries(statusDistribution).map(([category, count]: [string, number]) => (
                       <div
                         key={category}
                         className="flex items-center justify-between"
@@ -606,12 +513,12 @@ export default function ContractorsPage() {
                             <div
                               className="bg-secondary h-2 rounded-full"
                               style={{
-                                width: `${(count / contractors.length) * 100}%`,
+                                width: `${items.length > 0 ? (Number(count) / items.length) * 100 : 0}%`,
                               }}
                             />
                           </div>
                           <span className="text-sm text-muted-foreground">
-                            {count}
+                            {Number(count)}
                           </span>
                         </div>
                       </div>
@@ -627,14 +534,14 @@ export default function ContractorsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {contractors
-                      .sort(
-                        (a, b) =>
-                          new Date(b.lastContractDate).getTime() -
-                          new Date(a.lastContractDate).getTime()
-                      )
+                    {[...items]
+                      .sort((a: ContractorRow, b: ContractorRow) => {
+                        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+                        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+                        return tb - ta;
+                      })
                       .slice(0, 5)
-                      .map((contractor) => (
+                      .map((contractor: ContractorRow) => (
                         <div
                           key={contractor.id}
                           className="flex items-center justify-between p-3 border rounded-lg"
@@ -642,22 +549,20 @@ export default function ContractorsPage() {
                           <div className="flex items-center space-x-3">
                             <Building2 className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <p className="font-medium">
-                                {contractor.shortName}
-                              </p>
+                              <p className="font-medium">{contractor.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                Hợp đồng gần nhất
+                                Hợp đồng đang thực hiện
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-medium">
-                              {new Date(
-                                contractor.lastContractDate
-                              ).toLocaleDateString("vi-VN")}
+                              {contractor.created_at
+                                ? new Date(contractor.created_at).toLocaleDateString("vi-VN")
+                                : "—"}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {contractor.ongoingContracts} đang thực hiện
+                              {contractor.stats?.active_contracts || 0} đang thực hiện
                             </p>
                           </div>
                         </div>
@@ -691,5 +596,6 @@ export default function ContractorsPage() {
         </main>
       </div>
     </div>
+    </AuthGuard>
   );
 }

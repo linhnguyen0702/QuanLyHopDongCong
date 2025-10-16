@@ -12,14 +12,17 @@ router.use(authenticateToken)
 router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status = "active" } = req.query
-    const offset = (page - 1) * limit
+    const pageNum = Number.parseInt(page, 10) || 1
+    const limitNum = Number.parseInt(limit, 10) || 10
+    const offset = (pageNum - 1) * limitNum
+    const statusParam = typeof status === "string" && status.trim() === "" ? null : status
 
     let query = "SELECT * FROM contractors WHERE 1=1"
     const params = []
 
-    if (status) {
+    if (statusParam) {
       query += " AND status = ?"
-      params.push(status)
+      params.push(statusParam)
     }
 
     if (search) {
@@ -27,18 +30,39 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
 
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    params.push(Number.parseInt(limit), Number.parseInt(offset))
+    query += ` ORDER BY id DESC LIMIT ${limitNum} OFFSET ${offset}`
 
-    const [contractors] = await pool.execute(query, params)
+    let contractors
+    try {
+      const [rows] = await pool.execute(query, params)
+      contractors = rows
+    } catch (primaryErr) {
+      console.error("[Contractors][List] Primary query failed:", primaryErr && primaryErr.message)
+      // Fallback: đơn giản hóa truy vấn nếu schema khác biệt
+      let fbQuery = "SELECT * FROM contractors WHERE 1=1"
+      const fbParams = []
+      if (statusParam) {
+        fbQuery += " AND status = ?"
+        fbParams.push(statusParam)
+      }
+      if (search) {
+        fbQuery += " AND (name LIKE ? OR email LIKE ?)"
+        fbParams.push(`%${search}%`, `%${search}%`)
+      }
+      fbQuery += ` ORDER BY id DESC LIMIT ${limitNum} OFFSET ${offset}`
+      console.log("[Contractors][List][Fallback] SQL:", fbQuery)
+      console.log("[Contractors][List][Fallback] Params:", fbParams)
+      const [rows] = await pool.execute(fbQuery, fbParams)
+      contractors = rows
+    }
 
     // Get total count
     let countQuery = "SELECT COUNT(*) as total FROM contractors WHERE 1=1"
     const countParams = []
 
-    if (status) {
+    if (statusParam) {
       countQuery += " AND status = ?"
-      countParams.push(status)
+      countParams.push(statusParam)
     }
 
     if (search) {
@@ -54,22 +78,26 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
     let contractCounts = []
 
     if (contractorIds.length > 0) {
-      const placeholders = contractorIds.map(() => "?").join(",")
-      const [contractCountResult] = await pool.execute(
-        `
-        SELECT contractor_id, 
-               COUNT(*) as total_contracts,
-               COUNT(CASE WHEN status = 'active' THEN 1 END) as active_contracts,
-               COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_contracts,
-               SUM(value) as total_value
-        FROM contracts 
-        WHERE contractor_id IN (${placeholders})
-        GROUP BY contractor_id
-      `,
-        contractorIds,
-      )
-
-      contractCounts = contractCountResult
+      try {
+        const placeholders = contractorIds.map(() => "?").join(",")
+        const [contractCountResult] = await pool.execute(
+          `
+          SELECT contractor_id, 
+                 COUNT(*) as total_contracts,
+                 COUNT(CASE WHEN status = 'active' THEN 1 END) as active_contracts,
+                 COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_contracts,
+                 SUM(value) as total_value
+          FROM contracts 
+          WHERE contractor_id IN (${placeholders})
+          GROUP BY contractor_id
+        `,
+          contractorIds,
+        )
+        contractCounts = contractCountResult
+      } catch (aggErr) {
+        console.error("[Contractors][List] Aggregation failed:", aggErr && aggErr.message)
+        contractCounts = []
+      }
     }
 
     // Merge contract data with contractor data
@@ -100,10 +128,11 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("Get contractors error:", error)
+    console.error("Get contractors error:", error && error.stack ? error.stack : error)
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      ...(process.env.NODE_ENV !== "production" && { error: error?.message }),
     })
   }
 })
@@ -354,7 +383,7 @@ router.put(
         message: "Internal server error",
       })
     }
-  },
+  }
 )
 
 // Get contractor performance report

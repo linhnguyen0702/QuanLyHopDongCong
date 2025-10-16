@@ -16,6 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { vi } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { contractorsApi } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 
 interface ContractorFormProps {
   onClose: () => void
@@ -44,17 +46,48 @@ export function ContractorForm({ onClose, contractor }: ContractorFormProps) {
 
   const [newSpecialization, setNewSpecialization] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
     setIsSubmitting(true)
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        contactPerson: formData.representative.trim() || formData.shortName || formData.name,
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address?.trim() || "",
+        taxCode: formData.taxCode?.trim() || "",
+        bankAccount: formData.bankAccount?.trim() || "",
+        bankName: formData.bankName?.trim() || "",
+        description: formData.description?.trim() || "",
+      }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+      const res = await contractorsApi.create(payload)
 
-    console.log("Contractor data:", formData)
-    setIsSubmitting(false)
-    onClose()
+      if (res?.success) {
+        toast({
+          title: "Thành công",
+          description: "Đã thêm nhà thầu mới",
+        })
+        onClose()
+      } else {
+        const message = (res as any)?.message || "Không thể tạo nhà thầu"
+        toast({
+          title: "Lỗi",
+          description: message,
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tạo nhà thầu",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleInputChange = (field: string, value: any) => {

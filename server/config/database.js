@@ -55,6 +55,36 @@ const initializeDatabase = async () => {
       console.log("⚠️ Users table creation:", error.message);
     }
 
+    // Create contracts table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS contracts (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          contract_number VARCHAR(100) NOT NULL UNIQUE,
+          title VARCHAR(500) NOT NULL,
+          description TEXT,
+          contractor_id INT NOT NULL,
+          value DECIMAL(15,2) NOT NULL DEFAULT 0,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          status ENUM('draft','pending_approval','approved','active','completed','cancelled','expired','pending') DEFAULT 'draft',
+          progress DECIMAL(5,2) DEFAULT 0,
+          created_by INT,
+          approved_by INT,
+          approved_at TIMESTAMP NULL DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_contractor_id (contractor_id),
+          INDEX idx_status (status),
+          INDEX idx_created_by (created_by),
+          INDEX idx_approved_by (approved_by)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Contracts table ready")
+    } catch (error) {
+      console.log("⚠️ Contracts table creation:", error.message)
+    }
+
     // Create contractors table
     try {
       await pool.execute(`
@@ -80,6 +110,140 @@ const initializeDatabase = async () => {
       console.log("✅ Contractors table ready");
     } catch (error) {
       console.log("⚠️ Contractors table creation:", error.message);
+    }
+
+    // Create contract_payments table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS contract_payments (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          contract_id INT NOT NULL,
+          payment_number VARCHAR(50) NOT NULL,
+          amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+          due_date DATE NOT NULL,
+          paid_date DATE DEFAULT NULL,
+          status ENUM('pending','paid','overdue','cancelled') DEFAULT 'pending',
+          description TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_contract_id (contract_id),
+          INDEX idx_status (status),
+          UNIQUE KEY unique_payment_per_contract (contract_id, payment_number)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Contract payments table ready")
+    } catch (error) {
+      console.log("⚠️ Contract payments table creation:", error.message)
+    }
+
+    // Create contract_documents table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS contract_documents (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          contract_id INT NOT NULL,
+          document_name VARCHAR(500) NOT NULL,
+          document_type ENUM('contract','amendment','invoice','report','other') DEFAULT 'other',
+          file_path VARCHAR(1000) NOT NULL,
+          file_size BIGINT DEFAULT 0,
+          uploaded_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_contract_id (contract_id),
+          INDEX idx_document_type (document_type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Contract documents table ready")
+    } catch (error) {
+      console.log("⚠️ Contract documents table creation:", error.message)
+    }
+
+    // Create approvals table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS approvals (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          contract_id INT NOT NULL,
+          approver_id INT NOT NULL,
+          approval_level INT DEFAULT 1,
+          status ENUM('pending','approved','rejected') DEFAULT 'pending',
+          comments TEXT,
+          approved_at TIMESTAMP NULL DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_contract_approver (contract_id, approver_id),
+          INDEX idx_contract_id (contract_id),
+          INDEX idx_approver_id (approver_id),
+          INDEX idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Approvals table ready")
+    } catch (error) {
+      console.log("⚠️ Approvals table creation:", error.message)
+    }
+
+    // Create notifications table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          message VARCHAR(1000) NOT NULL,
+          type VARCHAR(50) DEFAULT 'info',
+          related_table VARCHAR(50) DEFAULT NULL,
+          related_id INT DEFAULT NULL,
+          is_read BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_user_id (user_id),
+          INDEX idx_is_read (is_read)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Notifications table ready")
+    } catch (error) {
+      console.log("⚠️ Notifications table creation:", error.message)
+    }
+
+    // Create audit_logs table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          table_name VARCHAR(100) NOT NULL,
+          record_id INT NOT NULL,
+          action VARCHAR(50) NOT NULL,
+          old_values JSON NULL,
+          new_values JSON NULL,
+          user_id INT,
+          ip_address VARCHAR(45),
+          user_agent TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_table_name (table_name),
+          INDEX idx_user_id (user_id),
+          INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Audit logs table ready")
+    } catch (error) {
+      console.log("⚠️ Audit logs table creation:", error.message)
+    }
+
+    // Create password_reset_otps table
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS password_reset_otps (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          otp VARCHAR(10) NOT NULL,
+          expires_at DATETIME NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_email (email),
+          INDEX idx_expires_at (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+      console.log("✅ Password reset OTPs table ready")
+    } catch (error) {
+      console.log("⚠️ Password reset OTPs table creation:", error.message)
     }
 
     // Create system_settings table

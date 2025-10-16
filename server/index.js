@@ -128,10 +128,15 @@ app.use("/api/settings", settingsRoutes); // Add settings routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error("Unhandled error:", err && err.stack ? err.stack : err);
   res.status(500).json({
     success: false,
-    message: "Something went wrong!",
+    message: "Internal server error",
+    ...(process.env.NODE_ENV !== "production" && {
+      error: err?.message || "",
+      route: req.originalUrl,
+      method: req.method,
+    }),
   });
 });
 

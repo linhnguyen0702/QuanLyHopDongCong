@@ -12,22 +12,23 @@ router.use(authenticateToken)
 router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
   try {
     const { page = 1, limit = 10, status, search, contractorId } = req.query
-    const offset = (page - 1) * limit
+    const pageNum = Number.parseInt(page, 10) || 1
+    const limitNum = Number.parseInt(limit, 10) || 10
+    const offset = (pageNum - 1) * limitNum
+    const statusParam = typeof status === "string" && status.trim() === "" ? null : status
 
     let query = `
       SELECT c.*, co.name as contractor_name, co.contact_person, co.email as contractor_email,
-             u.full_name as created_by_name,
-             DATEDIFF(c.end_date, CURDATE()) as days_remaining
+            DATEDIFF(c.end_date, CURDATE()) as days_remaining
       FROM contracts c
       LEFT JOIN contractors co ON c.contractor_id = co.id
-      LEFT JOIN users u ON c.created_by = u.id
       WHERE 1=1
     `
     const params = []
 
-    if (status) {
+    if (statusParam) {
       query += " AND c.status = ?"
-      params.push(status)
+      params.push(statusParam)
     }
 
     if (contractorId) {
@@ -40,19 +41,50 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
 
-    query += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
-    params.push(Number.parseInt(limit), Number.parseInt(offset))
+    query += ` ORDER BY c.id DESC LIMIT ${limitNum} OFFSET ${offset}`
 
-    const [contracts] = await pool.execute(query, params)
+    // Debug: log final query and params to diagnose parameter mismatch
+    try {
+      console.log("[Contracts][List] Final SQL:", query.replace(/\s+/g, " ").trim())
+      console.log("[Contracts][List] Params:", params)
+    } catch (_) {}
+
+    let contracts
+    try {
+      const [rows] = await pool.execute(query, params)
+      contracts = rows
+    } catch (primaryErr) {
+      console.error("[Contracts][List] Primary query failed:", primaryErr && primaryErr.message)
+      // Fallback: simpler query without JOIN and computed columns
+      let fallbackQuery = `SELECT * FROM contracts WHERE 1=1`
+      const fbParams = []
+      if (statusParam) {
+        fallbackQuery += " AND status = ?"
+        fbParams.push(statusParam)
+      }
+      if (contractorId) {
+        fallbackQuery += " AND contractor_id = ?"
+        fbParams.push(contractorId)
+      }
+      if (search) {
+        fallbackQuery += " AND (title LIKE ? OR contract_number LIKE ?)"
+        fbParams.push(`%${search}%`, `%${search}%`)
+      }
+      fallbackQuery += ` ORDER BY id DESC LIMIT ${limitNum} OFFSET ${offset}`
+      console.log("[Contracts][List][Fallback] SQL:", fallbackQuery)
+      console.log("[Contracts][List][Fallback] Params:", fbParams)
+      const [rows] = await pool.execute(fallbackQuery, fbParams)
+      contracts = rows
+    }
 
     // Get total count
     let countQuery =
       "SELECT COUNT(*) as total FROM contracts c LEFT JOIN contractors co ON c.contractor_id = co.id WHERE 1=1"
     const countParams = []
 
-    if (status) {
+    if (statusParam) {
       countQuery += " AND c.status = ?"
-      countParams.push(status)
+      countParams.push(statusParam)
     }
 
     if (contractorId) {
@@ -65,7 +97,38 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
       countParams.push(`%${search}%`, `%${search}%`, `%${search}%`)
     }
 
-    const [countResult] = await pool.execute(countQuery, countParams)
+    // Debug for count query as well
+    try {
+      console.log("[Contracts][Count] Final SQL:", countQuery.replace(/\s+/g, " ").trim())
+      console.log("[Contracts][Count] Params:", countParams)
+    } catch (_) {}
+
+    let countResult
+    try {
+      const [rows] = await pool.execute(countQuery, countParams)
+      countResult = rows
+    } catch (countErr) {
+      console.error("[Contracts][Count] Primary count failed:", countErr && countErr.message)
+      // Fallback count without JOIN/co.name search
+      let fbCountQuery = "SELECT COUNT(*) as total FROM contracts WHERE 1=1"
+      const fbCountParams = []
+      if (statusParam) {
+        fbCountQuery += " AND status = ?"
+        fbCountParams.push(statusParam)
+      }
+      if (contractorId) {
+        fbCountQuery += " AND contractor_id = ?"
+        fbCountParams.push(contractorId)
+      }
+      if (search) {
+        fbCountQuery += " AND (title LIKE ? OR contract_number LIKE ?)"
+        fbCountParams.push(`%${search}%`, `%${search}%`)
+      }
+      console.log("[Contracts][Count][Fallback] SQL:", fbCountQuery)
+      console.log("[Contracts][Count][Fallback] Params:", fbCountParams)
+      const [rows] = await pool.execute(fbCountQuery, fbCountParams)
+      countResult = rows
+    }
     const total = countResult[0].total
 
     res.json({
@@ -73,18 +136,19 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
       data: {
         contracts,
         pagination: {
-          page: Number.parseInt(page),
-          limit: Number.parseInt(limit),
+          page: pageNum,
+          limit: limitNum,
           total,
           pages: Math.ceil(total / limit),
         },
       },
     })
   } catch (error) {
-    console.error("Get contracts error:", error)
+    console.error("Get contracts error:", error && error.stack ? error.stack : error)
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      ...(process.env.NODE_ENV !== "production" && { error: error?.message }),
     })
   }
 })
@@ -97,12 +161,9 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
     const [contracts] = await pool.execute(
       `
       SELECT c.*, co.name as contractor_name, co.contact_person, co.email as contractor_email,
-             co.phone as contractor_phone, co.address as contractor_address,
-             u.full_name as created_by_name, ua.full_name as approved_by_name
+             co.phone as contractor_phone, co.address as contractor_address
       FROM contracts c
       LEFT JOIN contractors co ON c.contractor_id = co.id
-      LEFT JOIN users u ON c.created_by = u.id
-      LEFT JOIN users ua ON c.approved_by = ua.id
       WHERE c.id = ?
     `,
       [id],
@@ -157,7 +218,7 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
 // Create new contract
 router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
   try {
-    const { contractNumber, title, description, contractorId, value, startDate, endDate, status = "pending" } = req.body
+    const { contractNumber, title, description, contractorId, value, startDate, endDate } = req.body
 
     // Check if contract number already exists
     const [existingContracts] = await pool.execute("SELECT id FROM contracts WHERE contract_number = ?", [
@@ -181,15 +242,15 @@ router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
       })
     }
 
-    // Insert contract
+    // Insert contract (let DB apply default status)
     const [result] = await pool.execute(
       `
       INSERT INTO contracts (
-        contract_number, title, description, contractor_id, value, 
-        start_date, end_date, status, created_by, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        contract_number, title, description, contractor_id, value,
+        start_date, end_date, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `,
-      [contractNumber, title, description, contractorId, value, startDate, endDate, status, req.user.userId],
+      [contractNumber, title, description, contractorId, value, startDate, endDate, req.user.userId],
     )
 
     res.status(201).json({
@@ -204,7 +265,7 @@ router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
         value,
         startDate,
         endDate,
-        status,
+        status: "draft",
       },
     })
   } catch (error) {

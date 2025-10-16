@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { useSidebar } from "@/hooks/use-sidebar";
@@ -52,58 +52,21 @@ import {
 } from "lucide-react";
 import { ContractForm } from "@/components/contract-form";
 import { ContractDetails } from "@/components/contract-details";
+import { contractsApi } from "@/lib/api";
+import { AuthGuard } from "@/components/auth-guard";
 
-// Mock data for contracts
-const contracts = [
-  {
-    id: "HĐ-2024-001",
-    title: "Xây dựng cầu Nhật Tân 2",
-    contractor: "Công ty TNHH ABC Construction",
-    value: 450000000,
-    startDate: "2024-01-15",
-    endDate: "2024-12-31",
-    status: "active",
-    progress: 75,
-    blockchainHash: "0x1a2b3c4d5e6f7890abcdef1234567890",
-    category: "Xây dựng",
-  },
-  {
-    id: "HĐ-2024-002",
-    title: "Nâng cấp hệ thống điện",
-    contractor: "Tập đoàn Điện lực XYZ",
-    value: 280000000,
-    startDate: "2024-02-01",
-    endDate: "2024-08-30",
-    status: "pending",
-    progress: 45,
-    blockchainHash: "0x2b3c4d5e6f7890abcdef1234567890ab",
-    category: "Điện lực",
-  },
-  {
-    id: "HĐ-2024-003",
-    title: "Xây dựng trường học",
-    contractor: "Công ty Xây dựng DEF",
-    value: 320000000,
-    startDate: "2024-01-01",
-    endDate: "2024-06-30",
-    status: "completed",
-    progress: 100,
-    blockchainHash: "0x3c4d5e6f7890abcdef1234567890abcd",
-    category: "Giáo dục",
-  },
-  {
-    id: "HĐ-2024-004",
-    title: "Cải tạo hệ thống cấp nước",
-    contractor: "Công ty Cấp nước GHI",
-    value: 180000000,
-    startDate: "2024-03-01",
-    endDate: "2024-09-30",
-    status: "draft",
-    progress: 0,
-    blockchainHash: null,
-    category: "Hạ tầng",
-  },
-];
+type ContractRow = {
+  id: number;
+  contract_number: string;
+  title: string;
+  contractor_name?: string;
+  value: number;
+  start_date: string;
+  end_date: string;
+  status: string;
+  progress?: number;
+  category?: string;
+};
 
 export default function ContractsPage() {
   const { collapsed } = useSidebar();
@@ -111,6 +74,35 @@ export default function ContractsPage() {
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [items, setItems] = useState<ContractRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+
+  const load = async () => {
+    try {
+      const res = await contractsApi.getAll({ page: 1, limit: 100 });
+      if (res?.success) {
+        const list: any = (res as any).data?.contracts || (res as any).data || [];
+        setItems(Array.isArray(list) ? list : []);
+        setError("");
+      } else {
+        setError((res as any)?.message || "Không thể tải dữ liệu hợp đồng. Hãy đăng nhập lại.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await load();
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -146,15 +138,32 @@ export default function ContractsPage() {
     }).format(amount);
   };
 
-  const filteredContracts = contracts.filter(
+  const filteredContracts = items.filter(
     (contract) =>
-      contract.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.contractor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.id.toLowerCase().includes(searchTerm.toLowerCase())
+      (contract.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contract.contractor_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contract.contract_number || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <AuthGuard>
+        <div className="layout-container bg-background">
+          <Sidebar />
+          <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+            <Header />
+            <main className="p-6">
+              <div className="text-sm text-muted-foreground">Đang tải dữ liệu hợp đồng...</div>
+            </main>
+          </div>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   return (
-    <div className="layout-container bg-background">
+    <AuthGuard>
+      <div className="layout-container bg-background">
       <Sidebar />
       <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
         <Header />
@@ -188,7 +197,26 @@ export default function ContractsPage() {
                     lưu trữ trên blockchain.
                   </DialogDescription>
                 </DialogHeader>
-                <ContractForm onClose={() => setIsCreateDialogOpen(false)} />
+                <ContractForm
+                  onClose={() => setIsCreateDialogOpen(false)}
+                  onSuccess={async (created) => {
+                    // Thêm ngay vào danh sách để không cần refresh
+                    if (created?.id) {
+                      setItems((prev) => [{
+                        id: created.id,
+                        contract_number: created.contractNumber,
+                        title: created.title,
+                        value: Number(created.value) || 0,
+                        start_date: created.startDate,
+                        end_date: created.endDate,
+                        status: created.status || "draft",
+                      } as any, ...prev]);
+                    }
+                    // Đồng bộ lại từ server để đảm bảo nhất quán
+                    setLoading(true);
+                    await load();
+                  }}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -223,10 +251,15 @@ export default function ContractsPage() {
             <CardHeader>
               <CardTitle>Danh sách hợp đồng</CardTitle>
               <CardDescription>
-                Tổng cộng {filteredContracts.length} hợp đồng được tìm thấy
+                    Tổng cộng {filteredContracts.length} hợp đồng được tìm thấy
               </CardDescription>
             </CardHeader>
             <CardContent>
+                  {error && (
+                    <div className="mb-4 text-sm text-red-600">
+                      {error}
+                    </div>
+                  )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -244,28 +277,28 @@ export default function ContractsPage() {
                   {filteredContracts.map((contract) => (
                     <TableRow key={contract.id}>
                       <TableCell className="font-medium">
-                        {contract.id}
+                        {contract.contract_number}
                       </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{contract.title}</p>
                           <p className="text-sm text-muted-foreground">
-                            {contract.category}
+                            {contract.category || ""}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>{contract.contractor}</TableCell>
-                      <TableCell>{formatCurrency(contract.value)}</TableCell>
+                      <TableCell>{contract.contractor_name || ""}</TableCell>
+                      <TableCell>{formatCurrency(Number(contract.value) || 0)}</TableCell>
                       <TableCell>
                         <div className="text-sm">
                           <p>
-                            {new Date(contract.startDate).toLocaleDateString(
+                            {new Date(contract.start_date).toLocaleDateString(
                               "vi-VN"
                             )}
                           </p>
                           <p className="text-muted-foreground">
                             đến{" "}
-                            {new Date(contract.endDate).toLocaleDateString(
+                            {new Date(contract.end_date).toLocaleDateString(
                               "vi-VN"
                             )}
                           </p>
@@ -273,7 +306,8 @@ export default function ContractsPage() {
                       </TableCell>
                       <TableCell>{getStatusBadge(contract.status)}</TableCell>
                       <TableCell>
-                        {contract.blockchainHash ? (
+                        {/* Không có hash từ API hiện tại */}
+                        {false ? (
                           <div className="flex items-center space-x-1">
                             <Shield className="h-4 w-4 text-green-600" />
                             <span className="text-xs text-green-600">
@@ -305,7 +339,12 @@ export default function ContractsPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               Xem chi tiết
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedContract(contract);
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
                               <Edit className="h-4 w-4 mr-2" />
                               Chỉnh sửa
                             </DropdownMenuItem>
@@ -348,8 +387,34 @@ export default function ContractsPage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Edit Contract Dialog */}
+          <Dialog
+            open={isEditDialogOpen}
+            onOpenChange={setIsEditDialogOpen}
+          >
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Chỉnh sửa hợp đồng</DialogTitle>
+                <DialogDescription>
+                  Cập nhật thông tin hợp đồng
+                </DialogDescription>
+              </DialogHeader>
+              {selectedContract && (
+                <ContractForm
+                  contract={selectedContract}
+                  onClose={() => setIsEditDialogOpen(false)}
+                  onSuccess={async () => {
+                    setLoading(true);
+                    await load();
+                  }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     </div>
+    </AuthGuard>
   );
 }
