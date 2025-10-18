@@ -50,6 +50,17 @@ import {
   Download,
   Shield,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { ContractForm } from "@/components/contract-form";
 import { ContractDetails } from "@/components/contract-details";
 import { contractsApi } from "@/lib/api";
@@ -70,11 +81,14 @@ type ContractRow = {
 
 export default function ContractsPage() {
   const { collapsed } = useSidebar();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [contractToDelete, setContractToDelete] = useState<any>(null);
   const [items, setItems] = useState<ContractRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
@@ -100,11 +114,24 @@ export default function ContractsPage() {
     let mounted = true;
     (async () => {
       await load();
+      
+      // Check for edit parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const editId = urlParams.get('edit');
+      if (editId) {
+        const contractToEdit = items.find(item => item.id === parseInt(editId));
+        if (contractToEdit) {
+          setSelectedContract(contractToEdit);
+          setIsEditDialogOpen(true);
+        }
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [items]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -164,6 +191,182 @@ export default function ContractsPage() {
       (contract.contractor_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (contract.contract_number || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Xử lý xóa hợp đồng
+  const handleDeleteContract = async () => {
+    if (!contractToDelete) return;
+
+    try {
+      const response = await contractsApi.delete(contractToDelete.id);
+      
+      if (response.success) {
+        toast({
+          title: "Thành công",
+          description: "Đã xóa hợp đồng thành công",
+        });
+        
+        // Cập nhật danh sách
+        setItems(items.filter(item => item.id !== contractToDelete.id));
+        setIsDeleteDialogOpen(false);
+        setContractToDelete(null);
+      } else {
+        toast({
+          title: "Lỗi",
+          description: response.message || "Không thể xóa hợp đồng",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Delete contract error:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi xóa hợp đồng",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Xử lý tải xuống hợp đồng
+  const handleDownloadContract = async (contract: any) => {
+    try {
+      // Tạo nội dung PDF đơn giản
+      const contractData = {
+        title: contract.title,
+        contractNumber: contract.contract_number,
+        contractor: contract.contractor_name,
+        value: contract.value,
+        startDate: contract.start_date,
+        endDate: contract.end_date,
+        status: contract.status,
+        category: contract.category,
+      };
+
+      // Tạo nội dung HTML cho PDF
+      const htmlContent = `
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Hợp đồng ${contractData.contractNumber}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 40px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .contract-info { margin-bottom: 20px; }
+              .info-row { margin-bottom: 10px; }
+              .label { font-weight: bold; display: inline-block; width: 150px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>HỢP ĐỒNG DỰ ÁN</h1>
+              <h2>${contractData.title}</h2>
+            </div>
+            
+            <div class="contract-info">
+              <div class="info-row">
+                <span class="label">Mã hợp đồng:</span>
+                <span>${contractData.contractNumber}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Nhà thầu:</span>
+                <span>${contractData.contractor || 'N/A'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Giá trị:</span>
+                <span>${formatCurrency(contractData.value)}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Ngày bắt đầu:</span>
+                <span>${new Date(contractData.startDate).toLocaleDateString('vi-VN')}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Ngày kết thúc:</span>
+                <span>${new Date(contractData.endDate).toLocaleDateString('vi-VN')}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Trạng thái:</span>
+                <span>${contractData.status}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Danh mục:</span>
+                <span>${contractData.category || 'N/A'}</span>
+              </div>
+            </div>
+            
+            <div style="margin-top: 50px; text-align: center;">
+              <p><em>Xuất ngày: ${new Date().toLocaleDateString('vi-VN')}</em></p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Tạo blob và tải xuống
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hop-dong-${contractData.contractNumber}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Thành công",
+        description: "Đã tải xuống hợp đồng thành công",
+      });
+    } catch (error) {
+      console.error("Download contract error:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tải xuống hợp đồng",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Xử lý xuất Excel
+  const handleExportExcel = () => {
+    try {
+      // Tạo CSV content
+      const headers = ['Mã HĐ', 'Tên dự án', 'Nhà thầu', 'Giá trị', 'Ngày bắt đầu', 'Ngày kết thúc', 'Trạng thái', 'Danh mục'];
+      const csvContent = [
+        headers.join(','),
+        ...filteredContracts.map(contract => [
+          contract.contract_number,
+          `"${contract.title}"`,
+          `"${contract.contractor_name || ''}"`,
+          contract.value,
+          new Date(contract.start_date).toLocaleDateString('vi-VN'),
+          new Date(contract.end_date).toLocaleDateString('vi-VN'),
+          contract.status,
+          `"${contract.category || ''}"`
+        ].join(','))
+      ].join('\n');
+
+      // Tạo blob và tải xuống
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `danh-sach-hop-dong-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Thành công",
+        description: "Đã xuất danh sách hợp đồng thành công",
+      });
+    } catch (error) {
+      console.error("Export Excel error:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi xuất danh sách",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -258,7 +461,7 @@ export default function ContractsPage() {
                   <Filter className="h-4 w-4 mr-2" />
                   Bộ lọc
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" onClick={handleExportExcel}>
                   <Download className="h-4 w-4 mr-2" />
                   Xuất Excel
                 </Button>
@@ -368,12 +571,18 @@ export default function ContractsPage() {
                               <Edit className="h-4 w-4 mr-2" />
                               Chỉnh sửa
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDownloadContract(contract)}>
                               <Download className="h-4 w-4 mr-2" />
                               Tải xuống
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => {
+                                setContractToDelete(contract);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Xóa
                             </DropdownMenuItem>
@@ -432,6 +641,28 @@ export default function ContractsPage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Delete Confirmation Dialog */}
+          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Xác nhận xóa hợp đồng</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Bạn có chắc chắn muốn xóa hợp đồng "{contractToDelete?.title}" không? 
+                  Hành động này không thể hoàn tác.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Hủy</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeleteContract}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Xóa
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </main>
       </div>
     </div>

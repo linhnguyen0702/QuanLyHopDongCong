@@ -318,10 +318,14 @@ export const contractsApi = {
   }) => {
     if (data instanceof FormData) {
       // For FormData, don't set Content-Type header
-      return fetch('http://localhost:5000/api/contracts', {
+      const token = getAuthToken();
+      return fetch(`${API_BASE_URL}/contracts`, {
         method: 'POST',
         body: data,
-        credentials: 'include'
+        credentials: 'include',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       }).then(res => res.json());
     }
     return apiClient.post("/contracts", data);
@@ -342,10 +346,14 @@ export const contractsApi = {
   ) => {
     if (data instanceof FormData) {
       // For FormData, don't set Content-Type header
-      return fetch(`http://localhost:5000/api/contracts/${id}`, {
+      const token = getAuthToken();
+      return fetch(`${API_BASE_URL}/contracts/${id}`, {
         method: 'PUT',
         body: data,
-        credentials: 'include'
+        credentials: 'include',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       }).then(res => res.json());
     }
     return apiClient.put(`/contracts/${id}`, data);
@@ -356,6 +364,41 @@ export const contractsApi = {
   approve: (id: number) => apiClient.put(`/contracts/${id}/approve`),
 
   getStats: () => apiClient.get("/contracts/stats/overview"),
+
+  // Upload documents to existing contract
+  uploadDocuments: (contractId: number, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    const token = getAuthToken();
+    return fetch(`${API_BASE_URL}/contracts/${contractId}/documents`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    }).then(res => res.json());
+  },
+
+  // Download contract document
+  downloadDocument: (documentId: number) => {
+    const token = getAuthToken();
+    const url = `${API_BASE_URL}/documents/download/${documentId}`;
+    
+    // Create a temporary link to download the file
+    const link = document.createElement('a');
+    link.href = url;
+    if (token) {
+      link.href += `?token=${token}`;
+    }
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
 };
 
 // Contractors API
@@ -467,4 +510,39 @@ export const settingsApi = {
   // Reset category settings to default
   resetCategory: (category: string) =>
     apiClient.put(`/settings/reset/${category}`),
+};
+
+// Documents API
+export const documentsApi = {
+  getByContract: (contractId: number, documentType?: string) =>
+    apiClient.get(`/documents/contract/${contractId}`, { document_type: documentType }),
+
+  upload: (formData: FormData) => {
+    const token = getAuthToken();
+    return fetch(`${API_BASE_URL}/documents/upload`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    }).then(res => res.json());
+  },
+
+  download: (documentId: number) => {
+    const token = getAuthToken();
+    const url = `${API_BASE_URL}/documents/download/${documentId}`;
+    
+    // Create a temporary link to download the file
+    const link = document.createElement('a');
+    link.href = url;
+    if (token) {
+      link.href += `?token=${token}`;
+    }
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
+
+  delete: (documentId: number) => apiClient.delete(`/documents/${documentId}`),
 };

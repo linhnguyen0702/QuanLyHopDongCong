@@ -39,9 +39,81 @@ router.put("/test", handleUpload, validateContractUpdate, async (req, res) => {
   }
 });
 
-// Apply authentication to all routes except test and update
+// Upload documents to existing contract (no auth required for testing)
+router.post("/:id/documents", handleUpload, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if contract exists
+    const [contracts] = await pool.execute(
+      "SELECT id FROM contracts WHERE id = ?",
+      [id]
+    );
+    
+    if (contracts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy hợp đồng"
+      });
+    }
+    
+    // Save uploaded files to contract_documents table
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        await pool.execute(
+          `INSERT INTO contract_documents (
+            contract_id, document_name, file_path, file_size, 
+            document_type, mime_type, uploaded_by, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            id,
+            file.originalname,
+            file.path,
+            file.size,
+            'other', // Default document type
+            file.mimetype,
+            1 // Default user ID for testing
+          ]
+        );
+      }
+      
+      res.json({
+        success: true,
+        message: `Đã upload ${req.files.length} tài liệu thành công`,
+        data: {
+          files: req.files.map(file => ({
+            name: file.originalname,
+            size: file.size,
+            type: file.mimetype
+          }))
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "Không có tài liệu nào được upload"
+      });
+    }
+    
+  } catch (error) {
+    console.error("Upload documents error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi upload tài liệu",
+      error: error.message
+    });
+  }
+});
+
+// Apply authentication to all routes except test, update, and upload documents
 router.use((req, res, next) => {
-  if (req.path === '/test' || (req.method === 'PUT' && req.path.match(/^\/\d+$/))) {
+  // Skip authentication for upload documents
+  if (req.path.match(/^\/\d+\/documents$/) && req.method === 'POST') {
+    return next();
+  }
+  
+  if (req.path === '/test' || 
+      (req.method === 'PUT' && req.path.match(/^\/\d+$/))) {
     return next();
   }
   return authenticateToken(req, res, next);
@@ -334,6 +406,29 @@ router.post("/", handleUpload, validateContractCreate, logActivity("CREATE"), as
       ],
     )
 
+    const contractId = result.insertId;
+
+    // Save documents to contract_documents table
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        await pool.execute(
+          `INSERT INTO contract_documents (
+            contract_id, document_name, file_path, file_size, 
+            document_type, mime_type, uploaded_by, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            contractId,
+            file.originalname,
+            file.path,
+            file.size,
+            'other', // Default document type
+            file.mimetype,
+            req.user.userId
+          ]
+        );
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: "Tạo hợp đồng thành công",
@@ -487,6 +582,27 @@ router.put("/:id", handleUpload, validateId, validateContractUpdate, logActivity
     // Update contract
     const updateQuery = `UPDATE contracts SET ${updateFields.join(', ')} WHERE id = ?`;
     await pool.execute(updateQuery, updateValues);
+
+    // Save new documents to contract_documents table
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        await pool.execute(
+          `INSERT INTO contract_documents (
+            contract_id, document_name, file_path, file_size, 
+            document_type, mime_type, uploaded_by, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            id,
+            file.originalname,
+            file.path,
+            file.size,
+            'other', // Default document type
+            file.mimetype,
+            req.user.userId
+          ]
+        );
+      }
+    }
 
     res.json({
       success: true,

@@ -47,7 +47,8 @@ const upload = multer({
 });
 
 // Middleware để upload multiple files
-const uploadMultiple = upload.array('attachments', 5);
+const uploadMultiple = upload.array('files', 5); // Changed from 'attachments' to 'files'
+const uploadMultipleAttachments = upload.array('attachments', 5);
 const uploadNone = multer().none();
 
 // Middleware wrapper để xử lý lỗi
