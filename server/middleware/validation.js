@@ -131,6 +131,85 @@ const validateProfileUpdate = [
 // Contract validation rules
 const validateContract = [
   body("contractNumber")
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 100 })
+    .withMessage(
+      "Contract number must be less than 100 characters"
+    ),
+
+  body("title")
+    .trim()
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Title must be between 5 and 500 characters"),
+
+  body("contractorId")
+    .isInt({ min: 1 })
+    .withMessage("Valid contractor ID is required"),
+
+  body("value")
+    .isFloat({ min: 0 })
+    .withMessage("Contract value must be a positive number"),
+
+  body("startDate").isISO8601().withMessage("Valid start date is required"),
+
+  body("endDate")
+    .isISO8601()
+    .withMessage("Valid end date is required")
+    .custom((endDate, { req }) => {
+      if (new Date(endDate) <= new Date(req.body.startDate)) {
+        throw new Error("End date must be after start date");
+      }
+      return true;
+    }),
+
+  body("status")
+    .optional()
+    .isIn([
+      "draft",
+      "pending_approval",
+      "approved",
+      "active",
+      "completed",
+      "cancelled",
+      "expired",
+    ])
+    .withMessage("Invalid status"),
+
+  body("progress")
+    .optional()
+    .isFloat({ min: 0, max: 100 })
+    .withMessage("Progress must be between 0 and 100"),
+
+  body("category")
+    .optional()
+    .isIn(["Xây dựng", "Điện lực", "Giáo dục", "Hạ tầng", "Y tế", "Công nghệ", "Khác"])
+    .withMessage("Invalid category"),
+
+  body("specifications")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Specifications must be less than 5000 characters"),
+
+  body("deliverables")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Deliverables must be less than 5000 characters"),
+
+  body("paymentTerms")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Payment terms must be less than 5000 characters"),
+
+  handleValidationErrors,
+];
+
+// Contract creation validation rules (requires contractNumber)
+const validateContractCreate = [
+  body("contractNumber")
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage(
@@ -179,6 +258,97 @@ const validateContract = [
     .optional()
     .isFloat({ min: 0, max: 100 })
     .withMessage("Progress must be between 0 and 100"),
+
+  body("category")
+    .optional()
+    .isIn(["Xây dựng", "Điện lực", "Giáo dục", "Hạ tầng", "Y tế", "Công nghệ", "Khác"])
+    .withMessage("Invalid category"),
+
+  body("specifications")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Specifications must be less than 5000 characters"),
+
+  body("deliverables")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Deliverables must be less than 5000 characters"),
+
+  body("paymentTerms")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Payment terms must be less than 5000 characters"),
+
+  handleValidationErrors,
+];
+
+// Contract update validation rules (contractNumber optional)
+const validateContractUpdate = [
+  // Required fields for update
+  body("title")
+    .optional()
+    .trim()
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Title must be between 5 and 500 characters"),
+
+  body("contractorId")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("Valid contractor ID is required"),
+
+  body("value")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("Contract value must be a positive number"),
+
+  body("startDate")
+    .optional()
+    .isISO8601()
+    .withMessage("Valid start date is required"),
+
+  body("endDate")
+    .optional()
+    .isISO8601()
+    .withMessage("Valid end date is required")
+    .custom((endDate, { req }) => {
+      if (req.body.startDate && new Date(endDate) <= new Date(req.body.startDate)) {
+        throw new Error("End date must be after start date");
+      }
+      return true;
+    }),
+
+  // Optional fields
+  body("description")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Description must be less than 5000 characters"),
+
+  body("category")
+    .optional()
+    .isIn(["Xây dựng", "Điện lực", "Giáo dục", "Hạ tầng", "Y tế", "Công nghệ", "Khác"])
+    .withMessage("Invalid category"),
+
+  body("specifications")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Specifications must be less than 5000 characters"),
+
+  body("deliverables")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Deliverables must be less than 5000 characters"),
+
+  body("paymentTerms")
+    .optional()
+    .trim()
+    .isLength({ max: 5000 })
+    .withMessage("Payment terms must be less than 5000 characters"),
 
   handleValidationErrors,
 ];
@@ -360,6 +530,8 @@ module.exports = {
   validatePasswordChange,
   validateProfileUpdate,
   validateContract,
+  validateContractCreate,
+  validateContractUpdate,
   validateContractor,
   validatePayment,
   validateDocument,

@@ -82,8 +82,10 @@ export default function ContractsPage() {
   const load = async () => {
     try {
       const res = await contractsApi.getAll({ page: 1, limit: 100 });
+      console.log('Contracts API response:', res);
       if (res?.success) {
         const list: any = (res as any).data?.contracts || (res as any).data || [];
+        console.log('Contracts list:', list);
         setItems(Array.isArray(list) ? list : []);
         setError("");
       } else {
@@ -106,6 +108,20 @@ export default function ContractsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "draft":
+        return <Badge variant="outline">Nháp</Badge>;
+      case "pending_approval":
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Chờ phê duyệt
+          </Badge>
+        );
+      case "approved":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+            Đã phê duyệt
+          </Badge>
+        );
       case "active":
         return (
           <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
@@ -114,18 +130,22 @@ export default function ContractsPage() {
         );
       case "completed":
         return (
-          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+          <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
             Hoàn thành
           </Badge>
         );
-      case "pending":
+      case "cancelled":
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-            Chờ phê duyệt
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+            Đã hủy
           </Badge>
         );
-      case "draft":
-        return <Badge variant="outline">Bản nháp</Badge>;
+      case "expired":
+        return (
+          <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">
+            Hết hạn
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }

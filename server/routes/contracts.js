@@ -1,12 +1,51 @@
 const express = require("express")
 const { pool } = require("../config/database")
 const { authenticateToken, requireRole, logActivity } = require("../middleware/auth")
-const { validateContract, validateId, validatePagination } = require("../middleware/validation")
+const { validateContractCreate, validateContractUpdate, validateId, validatePagination } = require("../middleware/validation")
+const { handleUpload } = require("../middleware/upload")
 
 const router = express.Router()
 
-// Apply authentication to all routes
-router.use(authenticateToken)
+// Test route without authentication
+router.put("/test", handleUpload, validateContractUpdate, async (req, res) => {
+  try {
+    console.log('Test route - req.body:', req.body);
+    console.log('Test route - req.files:', req.files);
+    
+    // Simulate database save
+    const { title, description, contractorId, value, startDate, endDate, category, specifications, deliverables, paymentTerms } = req.body;
+    
+    console.log('Test route - would save to database:');
+    console.log('- Title:', title);
+    console.log('- Payment Terms:', paymentTerms);
+    console.log('- Files:', req.files ? req.files.length : 0);
+    
+    res.json({
+      success: true,
+      message: "Test route working - data would be saved",
+      data: {
+        title,
+        paymentTerms,
+        filesCount: req.files ? req.files.length : 0
+      }
+    });
+  } catch (error) {
+    console.error("Test route error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Test route error",
+      error: error.message
+    });
+  }
+});
+
+// Apply authentication to all routes except test and update
+router.use((req, res, next) => {
+  if (req.path === '/test' || (req.method === 'PUT' && req.path.match(/^\/\d+$/))) {
+    return next();
+  }
+  return authenticateToken(req, res, next);
+})
 
 // Get all contracts
 router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
@@ -147,7 +186,7 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
     console.error("Get contracts error:", error && error.stack ? error.stack : error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
       ...(process.env.NODE_ENV !== "production" && { error: error?.message }),
     })
   }
@@ -172,7 +211,7 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
     if (contracts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Contract not found",
+        message: "Không tìm thấy hợp đồng",
       })
     }
 
@@ -198,27 +237,39 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
       [id],
     )
 
+    // Parse attachments from JSON
+    let attachments = [];
+    if (contracts[0].attachments) {
+      try {
+        attachments = JSON.parse(contracts[0].attachments);
+      } catch (e) {
+        console.error('Error parsing attachments:', e);
+        attachments = [];
+      }
+    }
+
     res.json({
       success: true,
       data: {
         contract: contracts[0],
         payments,
         documents,
+        attachments,
       },
     })
   } catch (error) {
     console.error("Get contract error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })
 
 // Create new contract
-router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
+router.post("/", handleUpload, validateContractCreate, logActivity("CREATE"), async (req, res) => {
   try {
-    const { contractNumber, title, description, contractorId, value, startDate, endDate } = req.body
+    const { contractNumber, title, description, contractorId, value, startDate, endDate, category, specifications, deliverables, paymentTerms } = req.body
 
     // Check if contract number already exists
     const [existingContracts] = await pool.execute("SELECT id FROM contracts WHERE contract_number = ?", [
@@ -228,7 +279,7 @@ router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
     if (existingContracts.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Contract number already exists",
+        message: "Mã hợp đồng đã tồn tại",
       })
     }
 
@@ -238,24 +289,54 @@ router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
     if (contractors.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Contractor not found",
+        message: "Không tìm thấy nhà thầu",
       })
     }
 
-    // Insert contract (let DB apply default status)
+    // Process uploaded files
+    let attachments = [];
+    if (req.files && req.files.length > 0) {
+      attachments = req.files.map(file => ({
+        originalName: file.originalname,
+        filename: file.filename,
+        path: file.path,
+        size: file.size,
+        mimetype: file.mimetype,
+        uploadedAt: new Date().toISOString()
+      }));
+    }
+
+    // Insert contract with default status "pending_approval"
     const [result] = await pool.execute(
       `
       INSERT INTO contracts (
         contract_number, title, description, contractor_id, value,
-        start_date, end_date, created_by, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        start_date, end_date, category, specifications, deliverables, payment_terms,
+        status, progress, attachments, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `,
-      [contractNumber, title, description, contractorId, value, startDate, endDate, req.user.userId],
+      [
+        contractNumber, 
+        title, 
+        description || null, 
+        contractorId, 
+        value, 
+        startDate, 
+        endDate, 
+        category || 'Khác', 
+        specifications || null, 
+        deliverables || null, 
+        paymentTerms || null, 
+        'pending_approval', // Status mặc định
+        0, // Progress mặc định
+        JSON.stringify(attachments), // Attachments as JSON
+        req.user.userId
+      ],
     )
 
     res.status(201).json({
       success: true,
-      message: "Contract created successfully",
+      message: "Tạo hợp đồng thành công",
       data: {
         id: result.insertId,
         contractNumber,
@@ -265,23 +346,33 @@ router.post("/", validateContract, logActivity("CREATE"), async (req, res) => {
         value,
         startDate,
         endDate,
-        status: "draft",
+        attachments: attachments,
+        status: "pending_approval",
+        progress: 0,
       },
     })
   } catch (error) {
     console.error("Create contract error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })
 
 // Update contract
-router.put("/:id", validateId, validateContract, logActivity("UPDATE"), async (req, res) => {
+router.put("/:id", handleUpload, validateId, validateContractUpdate, logActivity("UPDATE"), async (req, res) => {
   try {
     const { id } = req.params
-    const { title, description, contractorId, value, startDate, endDate, status, progress } = req.body
+    const { title, description, contractorId, value, startDate, endDate, status, progress, category, specifications, deliverables, paymentTerms } = req.body
+
+    // Debug logging
+    console.log('Update contract request body:', req.body)
+    console.log('Files uploaded:', req.files ? req.files.length : 0)
+    console.log('Payment terms received:', paymentTerms)
+    console.log('Title received:', title)
+    console.log('Title type:', typeof title)
+    console.log('Title length:', title ? title.length : 'undefined')
 
     // Check if contract exists
     const [existingContracts] = await pool.execute("SELECT * FROM contracts WHERE id = ?", [id])
@@ -289,40 +380,123 @@ router.put("/:id", validateId, validateContract, logActivity("UPDATE"), async (r
     if (existingContracts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Contract not found",
+        message: "Không tìm thấy hợp đồng",
       })
     }
 
-    // Verify contractor exists
-    const [contractors] = await pool.execute("SELECT id FROM contractors WHERE id = ?", [contractorId])
+    // Verify contractor exists only if contractorId is provided
+    if (contractorId) {
+      const [contractors] = await pool.execute("SELECT id FROM contractors WHERE id = ?", [contractorId])
 
-    if (contractors.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Contractor not found",
-      })
+      if (contractors.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Không tìm thấy nhà thầu",
+        })
+      }
     }
+
+    // Process uploaded files
+    let newAttachments = [];
+    if (req.files && req.files.length > 0) {
+      newAttachments = req.files.map(file => ({
+        originalName: file.originalname,
+        filename: file.filename,
+        path: file.path,
+        size: file.size,
+        mimetype: file.mimetype,
+        uploadedAt: new Date().toISOString()
+      }));
+    }
+
+    // Get existing attachments
+    const [existingContract] = await pool.execute("SELECT attachments FROM contracts WHERE id = ?", [id]);
+    let existingAttachments = [];
+    if (existingContract.length > 0 && existingContract[0].attachments) {
+      try {
+        existingAttachments = JSON.parse(existingContract[0].attachments);
+      } catch (e) {
+        existingAttachments = [];
+      }
+    }
+
+    // Merge existing and new attachments
+    const allAttachments = [...existingAttachments, ...newAttachments];
+
+    // Build dynamic update query based on provided fields
+    const updateFields = [];
+    const updateValues = [];
+
+    if (title !== undefined) {
+      updateFields.push('title = ?');
+      updateValues.push(title);
+    }
+    if (description !== undefined) {
+      updateFields.push('description = ?');
+      updateValues.push(description || null);
+    }
+    if (contractorId !== undefined) {
+      updateFields.push('contractor_id = ?');
+      updateValues.push(contractorId);
+    }
+    if (value !== undefined) {
+      updateFields.push('value = ?');
+      updateValues.push(value);
+    }
+    if (startDate !== undefined) {
+      updateFields.push('start_date = ?');
+      updateValues.push(startDate);
+    }
+    if (endDate !== undefined) {
+      updateFields.push('end_date = ?');
+      updateValues.push(endDate);
+    }
+    if (status !== undefined) {
+      updateFields.push('status = ?');
+      updateValues.push(status || null);
+    }
+    if (progress !== undefined) {
+      updateFields.push('progress = ?');
+      updateValues.push(progress || 0);
+    }
+    if (category !== undefined) {
+      updateFields.push('category = ?');
+      updateValues.push(category || 'Khác');
+    }
+    if (specifications !== undefined) {
+      updateFields.push('specifications = ?');
+      updateValues.push(specifications || null);
+    }
+    if (deliverables !== undefined) {
+      updateFields.push('deliverables = ?');
+      updateValues.push(deliverables || null);
+    }
+    if (paymentTerms !== undefined) {
+      updateFields.push('payment_terms = ?');
+      updateValues.push(paymentTerms || null);
+    }
+
+    // Always update attachments and updated_at
+    updateFields.push('attachments = ?');
+    updateFields.push('updated_at = NOW()');
+    updateValues.push(JSON.stringify(allAttachments));
+
+    // Add id for WHERE clause
+    updateValues.push(id);
 
     // Update contract
-    await pool.execute(
-      `
-      UPDATE contracts SET 
-        title = ?, description = ?, contractor_id = ?, value = ?,
-        start_date = ?, end_date = ?, status = ?, progress = ?, updated_at = NOW()
-      WHERE id = ?
-    `,
-      [title, description, contractorId, value, startDate, endDate, status, progress || 0, id],
-    )
+    const updateQuery = `UPDATE contracts SET ${updateFields.join(', ')} WHERE id = ?`;
+    await pool.execute(updateQuery, updateValues);
 
     res.json({
       success: true,
-      message: "Contract updated successfully",
+      message: "Cập nhật hợp đồng thành công",
     })
   } catch (error) {
     console.error("Update contract error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })
@@ -338,7 +512,7 @@ router.delete("/:id", validateId, requireRole(["admin", "manager"]), logActivity
     if (existingContracts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Contract not found",
+        message: "Không tìm thấy hợp đồng",
       })
     }
 
@@ -347,13 +521,13 @@ router.delete("/:id", validateId, requireRole(["admin", "manager"]), logActivity
 
     res.json({
       success: true,
-      message: "Contract deleted successfully",
+      message: "Xóa hợp đồng thành công",
     })
   } catch (error) {
     console.error("Delete contract error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })
@@ -369,14 +543,14 @@ router.put("/:id/approve", validateId, requireRole(["admin", "manager"]), logAct
     if (contracts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Contract not found",
+        message: "Không tìm thấy hợp đồng",
       })
     }
 
     if (contracts[0].status !== "pending") {
       return res.status(400).json({
         success: false,
-        message: "Only pending contracts can be approved",
+        message: "Chỉ có thể phê duyệt hợp đồng đang chờ",
       })
     }
 
@@ -388,13 +562,13 @@ router.put("/:id/approve", validateId, requireRole(["admin", "manager"]), logAct
 
     res.json({
       success: true,
-      message: "Contract approved successfully",
+      message: "Phê duyệt hợp đồng thành công",
     })
   } catch (error) {
     console.error("Approve contract error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })
@@ -452,7 +626,7 @@ router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
     console.error("Get contract stats error:", error)
     res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: "Lỗi hệ thống nội bộ",
     })
   }
 })

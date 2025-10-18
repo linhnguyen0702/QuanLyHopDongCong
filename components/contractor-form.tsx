@@ -212,13 +212,13 @@ export function ContractorForm({ onClose, contractor }: ContractorFormProps) {
                   <SelectValue placeholder="Chọn danh mục" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="xay-dung">Xây dựng</SelectItem>
-                  <SelectItem value="dien-luc">Điện lực</SelectItem>
-                  <SelectItem value="giao-duc">Giáo dục</SelectItem>
-                  <SelectItem value="ha-tang">Hạ tầng</SelectItem>
-                  <SelectItem value="y-te">Y tế</SelectItem>
-                  <SelectItem value="cong-nghe">Công nghệ</SelectItem>
-                  <SelectItem value="khac">Khác</SelectItem>
+                <SelectItem value="Xây dựng">Xây dựng</SelectItem>
+                  <SelectItem value="Điện lực">Điện lực</SelectItem>
+                  <SelectItem value="Giáo dục">Giáo dục</SelectItem>
+                  <SelectItem value="Hạ tầng">Hạ tầng</SelectItem>
+                  <SelectItem value="Y tế">Y tế</SelectItem>
+                  <SelectItem value="Công nghệ">Công nghệ</SelectItem>
+                  <SelectItem value="Khác">Khác</SelectItem>
                 </SelectContent>
               </Select>
             </div>

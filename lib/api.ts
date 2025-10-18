@@ -306,7 +306,7 @@ export const contractsApi = {
 
   getById: (id: number) => apiClient.get(`/contracts/${id}`),
 
-  create: (data: {
+  create: (data: FormData | {
     contractNumber: string;
     title: string;
     description?: string;
@@ -315,11 +315,21 @@ export const contractsApi = {
     startDate: string;
     endDate: string;
     status?: string;
-  }) => apiClient.post("/contracts", data),
+  }) => {
+    if (data instanceof FormData) {
+      // For FormData, don't set Content-Type header
+      return fetch('http://localhost:5000/api/contracts', {
+        method: 'POST',
+        body: data,
+        credentials: 'include'
+      }).then(res => res.json());
+    }
+    return apiClient.post("/contracts", data);
+  },
 
   update: (
     id: number,
-    data: {
+    data: FormData | {
       title: string;
       description?: string;
       contractorId: number;
@@ -329,7 +339,17 @@ export const contractsApi = {
       status?: string;
       progress?: number;
     }
-  ) => apiClient.put(`/contracts/${id}`, data),
+  ) => {
+    if (data instanceof FormData) {
+      // For FormData, don't set Content-Type header
+      return fetch(`http://localhost:5000/api/contracts/${id}`, {
+        method: 'PUT',
+        body: data,
+        credentials: 'include'
+      }).then(res => res.json());
+    }
+    return apiClient.put(`/contracts/${id}`, data);
+  },
 
   delete: (id: number) => apiClient.delete(`/contracts/${id}`),
 
