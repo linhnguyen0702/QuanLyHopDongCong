@@ -17,14 +17,23 @@ import {
   CheckCircle,
   Clock,
   DollarSign,
+  Upload,
+  X,
 } from "lucide-react"
+import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
 interface ContractorDetailsProps {
   contractor: any
   onClose: () => void
+  onEdit?: () => void
 }
 
-export function ContractorDetails({ contractor, onClose }: ContractorDetailsProps) {
+export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDetailsProps) {
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const { toast } = useToast()
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -54,36 +63,125 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
     }
   }
 
-  // Mock contract history
-  const contractHistory = [
-    {
-      id: "HĐ-2024-001",
-      title: "Xây dựng cầu Nhật Tân 2",
-      value: 450000000,
-      startDate: "2024-01-15",
-      endDate: "2024-12-31",
-      status: "active",
-      progress: 75,
-    },
-    {
-      id: "HĐ-2023-015",
-      title: "Nâng cấp đường Láng",
-      value: 280000000,
-      startDate: "2023-06-01",
-      endDate: "2023-12-30",
-      status: "completed",
-      progress: 100,
-    },
-    {
-      id: "HĐ-2023-008",
-      title: "Xây dựng trường mầm non",
-      value: 150000000,
-      startDate: "2023-03-01",
-      endDate: "2023-08-31",
-      status: "completed",
-      progress: 100,
-    },
-  ]
+  // Export contractor profile function
+  const exportContractorProfile = async () => {
+    try {
+      const profileData = {
+        'Tên nhà thầu': contractor.name,
+        'Tên viết tắt': contractor.short_name || '',
+        'Mã số thuế': contractor.tax_code || '',
+        'Số đăng ký kinh doanh': contractor.business_registration_number || '',
+        'Email': contractor.email,
+        'Số điện thoại': contractor.phone,
+        'Địa chỉ': contractor.address || '',
+        'Website': contractor.website || '',
+        'Danh mục': contractor.category || '',
+        'Người đại diện': contractor.representative_name || contractor.contact_person || '',
+        'Chức vụ': contractor.representative_position || '',
+        'Lĩnh vực chuyên môn': contractor.expertise_field || '',
+        'Ngày thành lập': contractor.establishment_date ? new Date(contractor.establishment_date).toLocaleDateString('vi-VN') : '',
+        'Trạng thái': contractor.status || 'active',
+        'Tổng hợp đồng': contractor.stats?.total_contracts || 0,
+        'Hợp đồng đang thực hiện': contractor.stats?.active_contracts || 0,
+        'Hợp đồng hoàn thành': contractor.stats?.completed_contracts || 0,
+        'Tổng giá trị': contractor.stats?.total_value || 0,
+        'Ngày tạo': contractor.created_at ? new Date(contractor.created_at).toLocaleDateString('vi-VN') : ''
+      };
+
+      // Create CSV content
+      const headers = Object.keys(profileData);
+      const csvContent = [
+        headers.join(','),
+        headers.map(header => `"${(profileData as any)[header] || ''}"`).join(',')
+      ].join('\n');
+
+      // Download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ho_so_nha_thau_${contractor.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Export profile error:', error);
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setUploadedFiles(prev => [...prev, ...files])
+      toast({
+        title: "Thành công",
+        description: `Đã chọn ${files.length} file(s)`,
+      })
+    }
+  }
+
+  // Remove file from upload list
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Upload documents to contractor
+  const uploadDocuments = async () => {
+    if (uploadedFiles.length === 0) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn ít nhất một file để tải lên",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      uploadedFiles.forEach(file => {
+        formData.append('files', file)
+      })
+
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`http://localhost:5000/api/contractors/${contractor.id}/documents`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Thành công",
+          description: "Đã tải lên tài liệu thành công",
+        })
+        setUploadedFiles([])
+        // Refresh contractor data or trigger parent refresh
+        window.dispatchEvent(new CustomEvent('contractorUpdated'))
+      } else {
+        toast({
+          title: "Lỗi",
+          description: result.message || "Không thể tải lên tài liệu",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tải lên tài liệu",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -96,8 +194,8 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
         <div className="flex items-center space-x-2">
           {getStatusBadge(contractor.status)}
           <div className="flex items-center space-x-1">
-            {getRatingStars(contractor.rating)}
-            <span className="text-sm ml-1">{contractor.rating}</span>
+            {getRatingStars(contractor.rating || 0)}
+            <span className="text-sm ml-1">{contractor.rating || "—"}</span>
           </div>
         </div>
       </div>
@@ -122,21 +220,42 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
+                  <p className="text-sm text-muted-foreground">Tên viết tắt</p>
+                  <p className="font-medium">{contractor.short_name || "—"}</p>
+                </div>
+                <div>
                   <p className="text-sm text-muted-foreground">Mã số thuế</p>
-                  <p className="font-medium">{contractor.taxCode}</p>
+                  <p className="font-medium">{contractor.tax_code || "—"}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Số đăng ký kinh doanh</p>
-                  <p className="font-medium">{contractor.registrationNumber}</p>
+                  <p className="font-medium">{contractor.business_registration_number || "—"}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Ngày thành lập</p>
-                  <p className="font-medium">{new Date(contractor.establishedDate).toLocaleDateString("vi-VN")}</p>
+                  <p className="font-medium">
+                    {contractor.establishment_date 
+                      ? new Date(contractor.establishment_date).toLocaleDateString("vi-VN")
+                      : "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Danh mục</p>
-                  <Badge variant="outline">{contractor.category}</Badge>
+                  <Badge variant="outline">{contractor.category || "Khác"}</Badge>
                 </div>
+                {contractor.website && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Website</p>
+                    <a 
+                      href={contractor.website} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      {contractor.website}
+                    </a>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -152,20 +271,27 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
                   <Phone className="h-4 w-4 text-muted-foreground" />
                   <span>{contractor.phone}</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span>{contractor.email}</span>
+                <div className="flex items-start space-x-2">
+                  <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                  <span className="break-all text-sm">{contractor.email}</span>
                 </div>
                 <div className="flex items-start space-x-2">
                   <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                  <span className="text-sm">{contractor.address}</span>
+                  <span className="text-sm">{contractor.address || "—"}</span>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Website</p>
-                  <a href={`https://${contractor.website}`} className="text-blue-600 hover:underline">
-                    {contractor.website}
-                  </a>
-                </div>
+                {contractor.website && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Website</p>
+                    <a 
+                      href={contractor.website.startsWith('http') ? contractor.website : `https://${contractor.website}`} 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {contractor.website}
+                    </a>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -173,53 +299,40 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
           {/* Representative */}
           <Card>
             <CardHeader>
-              <CardTitle>Người đại diện</CardTitle>
+              <CardTitle>Người đại diện pháp luật</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center">
-                  <span className="font-medium">{contractor.representative.charAt(0)}</span>
+                  <span className="font-medium">
+                    {(contractor.representative_name || contractor.contact_person || "N")[0].toUpperCase()}
+                  </span>
                 </div>
                 <div>
-                  <p className="font-medium">{contractor.representative}</p>
-                  <p className="text-sm text-muted-foreground">{contractor.representativePosition}</p>
+                  <p className="font-medium">{contractor.representative_name || contractor.contact_person || "—"}</p>
+                  <p className="text-sm text-muted-foreground">{contractor.representative_position || "—"}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Specialization */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Lĩnh vực chuyên môn</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {contractor.specialization.map((spec: string, index: number) => (
-                  <Badge key={index} variant="outline">
-                    {spec}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Certifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Chứng chỉ và giấy phép</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {contractor.certifications.map((cert: string, index: number) => (
-                  <div key={index} className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <span>{cert}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {contractor.expertise_field && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lĩnh vực chuyên môn</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {contractor.expertise_field.split(", ").map((spec: string, index: number) => (
+                    <Badge key={index} variant="outline">
+                      {spec}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="contracts" className="space-y-6">
@@ -230,36 +343,44 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {contractHistory.map((contract) => (
-                  <div key={contract.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h4 className="font-medium">{contract.title}</h4>
-                        <Badge
-                          variant={contract.status === "completed" ? "default" : "secondary"}
-                          className={
-                            contract.status === "completed"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          }
-                        >
-                          {contract.status === "completed" ? "Hoàn thành" : "Đang thực hiện"}
-                        </Badge>
+                {contractor.contracts && contractor.contracts.length > 0 ? (
+                  contractor.contracts.map((contract: any) => (
+                    <div key={contract.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <h4 className="font-medium">{contract.title}</h4>
+                          <Badge
+                            variant={contract.status === "completed" ? "default" : "secondary"}
+                            className={
+                              contract.status === "completed"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                            }
+                          >
+                            {contract.status === "completed" ? "Hoàn thành" : "Đang thực hiện"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {contract.contract_number} • {formatCurrency(contract.value)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {contract.start_date ? new Date(contract.start_date).toLocaleDateString("vi-VN") : "—"} -{" "}
+                          {contract.end_date ? new Date(contract.end_date).toLocaleDateString("vi-VN") : "—"}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {contract.id} • {formatCurrency(contract.value)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(contract.startDate).toLocaleDateString("vi-VN")} -{" "}
-                        {new Date(contract.endDate).toLocaleDateString("vi-VN")}
-                      </p>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">{contract.progress || 0}%</p>
+                        <p className="text-xs text-muted-foreground">Tiến độ</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{contract.progress}%</p>
-                      <p className="text-xs text-muted-foreground">Tiến độ</p>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Chưa có hợp đồng nào</p>
+                    <p className="text-sm">Nhà thầu này chưa có hợp đồng được ghi nhận</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -274,7 +395,7 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{contractor.totalContracts}</div>
+                <div className="text-2xl font-bold">{contractor.stats?.total_contracts || 0}</div>
                 <p className="text-xs text-muted-foreground">Hợp đồng đã ký</p>
               </CardContent>
             </Card>
@@ -285,7 +406,7 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(contractor.totalValue)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(contractor.stats?.total_value || 0)}</div>
                 <p className="text-xs text-muted-foreground">Tổng giá trị hợp đồng</p>
               </CardContent>
             </Card>
@@ -296,9 +417,11 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
                 <CheckCircle className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">{contractor.completedContracts}</div>
+                <div className="text-2xl font-bold text-green-600">{contractor.stats?.completed_contracts || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  {Math.round((contractor.completedContracts / contractor.totalContracts) * 100)}% tỷ lệ hoàn thành
+                  {contractor.stats?.total_contracts > 0 
+                    ? Math.round(((contractor.stats?.completed_contracts || 0) / contractor.stats?.total_contracts) * 100)
+                    : 0}% tỷ lệ hoàn thành
                 </p>
               </CardContent>
             </Card>
@@ -309,7 +432,7 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
                 <Clock className="h-4 w-4 text-yellow-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{contractor.ongoingContracts}</div>
+                <div className="text-2xl font-bold text-yellow-600">{contractor.stats?.active_contracts || 0}</div>
                 <p className="text-xs text-muted-foreground">Hợp đồng đang thực hiện</p>
               </CardContent>
             </Card>
@@ -338,29 +461,93 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {[
-                  { name: "Giấy phép kinh doanh.pdf", size: "1.2 MB", date: "15/05/2010" },
-                  { name: "Chứng chỉ ISO 9001.pdf", size: "856 KB", date: "20/03/2020" },
-                  { name: "Hồ sơ năng lực.pdf", size: "3.4 MB", date: "10/01/2024" },
-                  { name: "Báo cáo tài chính 2023.pdf", size: "2.1 MB", date: "31/12/2023" },
-                ].map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{doc.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {doc.size} • {doc.date}
-                        </p>
-                      </div>
+              {/* Upload Section */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium mb-3">Tải lên tài liệu mới</h4>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-2">Kéo thả file vào đây hoặc click để chọn</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => document.getElementById('contractor-file-upload')?.click()}
+                  >
+                    Chọn file
+                  </Button>
+                  <input
+                    id="contractor-file-upload"
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </div>
+                
+                {/* Display selected files */}
+                {uploadedFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-medium">Files đã chọn:</p>
+                    <div className="space-y-1">
+                      {uploadedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">{file.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
-                      Tải xuống
+                    <Button 
+                      onClick={uploadDocuments} 
+                      disabled={isUploading}
+                      className="w-full"
+                    >
+                      {isUploading ? "Đang tải lên..." : "Tải lên tài liệu"}
                     </Button>
                   </div>
-                ))}
+                )}
+              </div>
+
+              {/* Existing Documents */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Tài liệu hiện có</h4>
+                {contractor.attachments && contractor.attachments.length > 0 ? (
+                  contractor.attachments.map((doc: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{doc.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(doc.size / 1024 / 1024).toFixed(2)} MB • {new Date(doc.lastModified).toLocaleDateString('vi-VN')}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Tải xuống
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Chưa có tài liệu nào</p>
+                    <p className="text-sm">Tải lên tài liệu để quản lý hồ sơ nhà thầu</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -371,14 +558,16 @@ export function ContractorDetails({ contractor, onClose }: ContractorDetailsProp
 
       {/* Actions */}
       <div className="flex justify-end space-x-4">
-        <Button variant="outline">
+        <Button variant="outline" onClick={exportContractorProfile}>
           <Download className="h-4 w-4 mr-2" />
           Xuất hồ sơ
         </Button>
-        <Button variant="outline">
-          <Edit className="h-4 w-4 mr-2" />
-          Chỉnh sửa
-        </Button>
+        {onEdit && (
+          <Button variant="outline" onClick={onEdit}>
+            <Edit className="h-4 w-4 mr-2" />
+            Chỉnh sửa
+          </Button>
+        )}
         <Button onClick={onClose}>Đóng</Button>
       </div>
     </div>

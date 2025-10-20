@@ -361,6 +361,7 @@ const validateContractor = [
     .withMessage("Company name must be between 2 and 255 characters"),
 
   body("contactPerson")
+    .optional()
     .trim()
     .isLength({ min: 2, max: 255 })
     .withMessage("Contact person name must be between 2 and 255 characters"),
@@ -399,6 +400,68 @@ const validateContractor = [
     .trim()
     .isLength({ max: 255 })
     .withMessage("Bank name must be less than 255 characters"),
+
+  // New fields validation
+  body("shortName")
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage("Short name must be less than 100 characters"),
+
+  body("businessRegistrationNumber")
+    .optional()
+    .trim()
+    .isLength({ max: 50 })
+    .withMessage("Business registration number must be less than 50 characters"),
+
+  body("category")
+    .optional()
+    .isIn(["Xây dựng", "Điện lực", "Giáo dục", "Hạ tầng", "Y tế", "Công nghệ", "Khác"])
+    .withMessage("Invalid category"),
+
+  body("establishmentDate")
+    .optional()
+    .custom((value) => {
+      if (!value || value === null || value === "") return true;
+      return new Date(value).toISOString() !== "Invalid Date";
+    })
+    .withMessage("Valid establishment date is required"),
+
+  body("website")
+    .optional()
+    .custom((value) => {
+      if (!value || value.trim() === "") return true;
+      try {
+        new URL(value.startsWith('http') ? value : `https://${value}`);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .withMessage("Please provide a valid website URL"),
+
+  body("representativeName")
+    .optional()
+    .trim()
+    .isLength({ max: 255 })
+    .withMessage("Representative name must be less than 255 characters"),
+
+  body("representativePosition")
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage("Representative position must be less than 100 characters"),
+
+  body("expertiseField")
+    .optional()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage("Expertise field must be less than 2000 characters"),
+
+  body("attachments")
+    .optional()
+    .isArray()
+    .withMessage("Attachments must be an array"),
 
   handleValidationErrors,
 ];

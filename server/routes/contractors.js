@@ -11,7 +11,7 @@ router.use(authenticateToken)
 // Get all contractors
 router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status = "active" } = req.query
+    const { page = 1, limit = 10, search, status } = req.query
     const pageNum = Number.parseInt(page, 10) || 1
     const limitNum = Number.parseInt(limit, 10) || 10
     const offset = (pageNum - 1) * limitNum
@@ -178,11 +178,42 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
       [id],
     )
 
+    // Parse attachments from JSON
+    let attachments = [];
+    if (contractors[0].attachments) {
+      try {
+        // Check if it's already an object or a string
+        if (typeof contractors[0].attachments === 'string') {
+          // If it's a string, try to parse it
+          if (contractors[0].attachments === '[object Object]') {
+            console.log('Attachments is [object Object], setting empty array');
+            attachments = [];
+          } else {
+            attachments = JSON.parse(contractors[0].attachments);
+            console.log('Contractor attachments parsed from string:', attachments);
+          }
+        } else if (typeof contractors[0].attachments === 'object') {
+          // If it's already an object (MySQL JSON type), use it directly
+          attachments = contractors[0].attachments;
+          console.log('Contractor attachments is already object:', attachments);
+        } else {
+          console.log('Attachments is neither string nor object:', typeof contractors[0].attachments);
+          attachments = [];
+        }
+      } catch (e) {
+        console.error('Error parsing attachments:', e);
+        attachments = [];
+      }
+    } else {
+      console.log('No attachments field found in contractor data');
+    }
+
     res.json({
       success: true,
       data: {
         contractor: contractors[0],
         contracts,
+        attachments,
         stats: stats[0] || {
           total_contracts: 0,
           active_contracts: 0,
@@ -205,7 +236,12 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
 // Create new contractor
 router.post("/", validateContractor, logActivity("CREATE"), async (req, res) => {
   try {
-    const { name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description } = req.body
+    console.log("Received contractor data:", req.body)
+    const { 
+      name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description,
+      shortName, businessRegistrationNumber, category, establishmentDate, website,
+      representativeName, representativePosition, expertiseField, attachments
+    } = req.body
 
     // Check if contractor with same email already exists
     const [existingContractors] = await pool.execute("SELECT id FROM contractors WHERE email = ?", [email])
@@ -222,10 +258,14 @@ router.post("/", validateContractor, logActivity("CREATE"), async (req, res) => 
       `
       INSERT INTO contractors (
         name, contact_person, email, phone, address, tax_code, 
-        bank_account, bank_name, description, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        bank_account, bank_name, description, short_name, business_registration_number,
+        category, establishment_date, website, representative_name, representative_position,
+        expertise_field, attachments, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `,
-      [name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description],
+      [name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description,
+       shortName, businessRegistrationNumber, category, establishmentDate, website,
+       representativeName, representativePosition, expertiseField, JSON.stringify(attachments || [])],
     )
 
     res.status(201).json({
@@ -242,6 +282,15 @@ router.post("/", validateContractor, logActivity("CREATE"), async (req, res) => 
         bankAccount,
         bankName,
         description,
+        shortName,
+        businessRegistrationNumber,
+        category,
+        establishmentDate,
+        website,
+        representativeName,
+        representativePosition,
+        expertiseField,
+        attachments,
       },
     })
   } catch (error) {
@@ -257,7 +306,11 @@ router.post("/", validateContractor, logActivity("CREATE"), async (req, res) => 
 router.put("/:id", validateId, validateContractor, logActivity("UPDATE"), async (req, res) => {
   try {
     const { id } = req.params
-    const { name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description } = req.body
+    const { 
+      name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description,
+      shortName, businessRegistrationNumber, category, establishmentDate, website,
+      representativeName, representativePosition, expertiseField, attachments
+    } = req.body
 
     // Check if contractor exists
     const [existingContractors] = await pool.execute("SELECT id, email FROM contractors WHERE id = ?", [id])
@@ -286,10 +339,16 @@ router.put("/:id", validateId, validateContractor, logActivity("UPDATE"), async 
       `
       UPDATE contractors SET 
         name = ?, contact_person = ?, email = ?, phone = ?, address = ?,
-        tax_code = ?, bank_account = ?, bank_name = ?, description = ?, updated_at = NOW()
+        tax_code = ?, bank_account = ?, bank_name = ?, description = ?, 
+        short_name = ?, business_registration_number = ?, category = ?, 
+        establishment_date = ?, website = ?, representative_name = ?, 
+        representative_position = ?, expertise_field = ?, attachments = ?, 
+        updated_at = NOW()
       WHERE id = ?
     `,
-      [name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description, id],
+      [name, contactPerson, email, phone, address, taxCode, bankAccount, bankName, description,
+       shortName, businessRegistrationNumber, category, establishmentDate, website,
+       representativeName, representativePosition, expertiseField, JSON.stringify(attachments || []), id],
     )
 
     res.json({
@@ -455,6 +514,89 @@ router.get("/:id/performance", validateId, logActivity("VIEW"), async (req, res)
     })
   } catch (error) {
     console.error("Get contractor performance error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    })
+  }
+})
+
+// Upload documents for contractor
+router.post("/:id/documents", validateId, logActivity("UPLOAD"), async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    // Check if contractor exists
+    const [contractors] = await pool.execute("SELECT id FROM contractors WHERE id = ?", [id])
+    
+    if (contractors.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Contractor not found",
+      })
+    }
+
+    // Handle file upload using multer middleware
+    const upload = require("../middleware/upload")
+    
+    upload.array('files', 10)(req, res, async (err) => {
+      if (err) {
+        console.error("Upload error:", err)
+        return res.status(400).json({
+          success: false,
+          message: "File upload failed",
+        })
+      }
+
+      try {
+        const files = req.files || []
+        
+        if (files.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "No files uploaded",
+          })
+        }
+
+        // Get existing attachments
+        const [existingContractors] = await pool.execute("SELECT attachments FROM contractors WHERE id = ?", [id])
+        const existingAttachments = existingContractors[0]?.attachments ? JSON.parse(existingContractors[0].attachments) : []
+
+        // Add new files to attachments
+        const newAttachments = files.map(file => ({
+          name: file.originalname,
+          size: file.size,
+          type: file.mimetype,
+          path: file.path,
+          uploadedAt: new Date().toISOString()
+        }))
+
+        const updatedAttachments = [...existingAttachments, ...newAttachments]
+
+        // Update contractor with new attachments
+        await pool.execute(
+          "UPDATE contractors SET attachments = ?, updated_at = NOW() WHERE id = ?",
+          [JSON.stringify(updatedAttachments), id]
+        )
+
+        res.json({
+          success: true,
+          message: `Successfully uploaded ${files.length} file(s)`,
+          data: {
+            uploadedFiles: newAttachments,
+            totalFiles: updatedAttachments.length
+          }
+        })
+      } catch (error) {
+        console.error("Error processing uploaded files:", error)
+        res.status(500).json({
+          success: false,
+          message: "Internal server error",
+        })
+      }
+    })
+  } catch (error) {
+    console.error("Upload documents error:", error)
     res.status(500).json({
       success: false,
       message: "Internal server error",

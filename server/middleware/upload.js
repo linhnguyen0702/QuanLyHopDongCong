@@ -11,7 +11,10 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
     const name = path.basename(file.originalname, extension);
-    cb(null, `${name}-${uniqueSuffix}${extension}`);
+    
+    // Encode tên file để tránh lỗi font chữ
+    const encodedName = Buffer.from(name, 'utf8').toString('base64');
+    cb(null, `${encodedName}-${uniqueSuffix}${extension}`);
   }
 });
 

@@ -365,17 +365,20 @@ router.post("/", handleUpload, validateContractCreate, logActivity("CREATE"), as
       })
     }
 
-    // Process uploaded files
+    // Process attachments like contractors (JSON only, no file upload)
     let attachments = [];
-    if (req.files && req.files.length > 0) {
-      attachments = req.files.map(file => ({
-        originalName: file.originalname,
-        filename: file.filename,
-        path: file.path,
-        size: file.size,
-        mimetype: file.mimetype,
-        uploadedAt: new Date().toISOString()
-      }));
+    if (req.body.attachments) {
+      try {
+        const attachmentsInfo = JSON.parse(req.body.attachments);
+        attachments = attachmentsInfo.map((att, index) => ({
+          name: att.name,
+          size: att.size,
+          type: att.type,
+          lastModified: att.lastModified
+        }));
+      } catch (e) {
+        console.error('Error parsing attachments info:', e);
+      }
     }
 
     // Insert contract with default status "pending_approval"
@@ -491,17 +494,20 @@ router.put("/:id", handleUpload, validateId, validateContractUpdate, logActivity
       }
     }
 
-    // Process uploaded files
+    // Process attachments like contractors (JSON only, no file upload)
     let newAttachments = [];
-    if (req.files && req.files.length > 0) {
-      newAttachments = req.files.map(file => ({
-        originalName: file.originalname,
-        filename: file.filename,
-        path: file.path,
-        size: file.size,
-        mimetype: file.mimetype,
-        uploadedAt: new Date().toISOString()
-      }));
+    if (req.body.attachments) {
+      try {
+        const attachmentsInfo = JSON.parse(req.body.attachments);
+        newAttachments = attachmentsInfo.map((att, index) => ({
+          name: att.name,
+          size: att.size,
+          type: att.type,
+          lastModified: att.lastModified
+        }));
+      } catch (e) {
+        console.error('Error parsing attachments info during update:', e);
+      }
     }
 
     // Get existing attachments
@@ -746,5 +752,69 @@ router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
     })
   }
 })
+
+// Download contract attachment
+router.get("/download-attachment/:id/:filename", async (req, res) => {
+  try {
+    const { id, filename } = req.params;
+    
+    // Get contract attachments
+    const [contracts] = await pool.execute("SELECT attachments FROM contracts WHERE id = ?", [id]);
+    
+    if (contracts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Contract not found",
+      });
+    }
+
+    let attachments = [];
+    if (contracts[0].attachments) {
+      try {
+        attachments = JSON.parse(contracts[0].attachments);
+      } catch (e) {
+        console.error('Error parsing attachments:', e);
+        return res.status(500).json({
+          success: false,
+          message: "Error parsing attachments",
+        });
+      }
+    }
+
+    // Find the attachment
+    const attachment = attachments.find(att => att.filename === filename);
+    
+    if (!attachment) {
+      return res.status(404).json({
+        success: false,
+        message: "Attachment not found",
+      });
+    }
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalName}"`);
+    res.setHeader('Content-Type', attachment.mimetype || 'application/octet-stream');
+    
+    // Send file
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '..', attachment.path);
+    
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).json({
+        success: false,
+        message: "File not found on server",
+      });
+    }
+  } catch (error) {
+    console.error("Download attachment error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
 
 module.exports = router

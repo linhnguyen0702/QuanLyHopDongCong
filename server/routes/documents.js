@@ -143,7 +143,7 @@ router.post(
 );
 
 // Download document
-router.get("/download/:id", authenticateToken, async (req, res) => {
+router.get("/download/:id", async (req, res) => {
   try {
     const { id } = req.params;
 

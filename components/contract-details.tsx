@@ -106,8 +106,7 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
     try {
       // Nếu có document ID thực tế, sử dụng API
       if (doc.id) {
-        const token = localStorage.getItem("auth_token");
-        const url = `http://localhost:5000/api/documents/download/${doc.id}${token ? `?token=${token}` : ''}`;
+        const url = `http://localhost:5000/api/documents/download/${doc.id}`;
         
         // Tạo link tải xuống với tên file gốc
         const link = document.createElement('a');
@@ -121,6 +120,25 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
         toast({
           title: "Thành công",
           description: `Đang tải xuống ${doc.document_name || doc.originalName}`,
+        });
+        return;
+      }
+
+      // Xử lý attachments từ contract creation
+      if (doc.originalName && doc.path) {
+        const url = `http://localhost:5000/api/contracts/download-attachment/${contract.id}/${encodeURIComponent(doc.filename)}`;
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.originalName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast({
+          title: "Thành công",
+          description: `Đang tải xuống ${doc.originalName}`,
         });
         return;
       }
@@ -167,6 +185,39 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
       });
     } catch (error) {
       console.error("Download document error:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tải xuống tài liệu",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Xử lý tải xuống attachment từ JSON (giống contractors)
+  const handleDownloadAttachment = async (attachment: any) => {
+    try {
+      // Tạo blob từ file data (giống contractors)
+      const blob = new Blob([attachment.data || ''], { type: attachment.type });
+      const url = URL.createObjectURL(blob);
+      
+      // Tạo link tải xuống với tên file gốc
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.name;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Cleanup
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Thành công",
+        description: `Đang tải xuống ${attachment.name}`,
+      });
+    } catch (error) {
+      console.error("Download attachment error:", error);
       toast({
         title: "Lỗi",
         description: "Có lỗi xảy ra khi tải xuống tài liệu",
@@ -576,161 +627,153 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
         <TabsContent value="documents" className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
               <CardTitle className="flex items-center">
                 <FileText className="h-5 w-5 mr-2" />
                 Tài liệu hợp đồng
               </CardTitle>
-                <Button 
-                  onClick={() => setShowUploadForm(!showUploadForm)}
-                  variant="outline"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Upload tài liệu
-                </Button>
-              </div>
             </CardHeader>
             <CardContent>
-              {/* Upload Form */}
-              {showUploadForm && (
-                <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-                  <h4 className="font-medium mb-3">Upload tài liệu mới</h4>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <input
-                        type="file"
-                        multiple
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
-                        onChange={handleFileSelect}
-                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Hỗ trợ: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (tối đa 10MB)
-                      </p>
-                    </div>
-
-                    {/* Selected Files */}
-                    {selectedFiles.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Files đã chọn:</p>
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-white border rounded">
-                            <div className="flex items-center space-x-2">
-                              <FileText className="h-4 w-4 text-gray-500" />
-                              <span className="text-sm">{file.name}</span>
-                              <span className="text-xs text-gray-500">
-                                ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                              </span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeSelectedFile(index)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+              {/* Upload Section */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium mb-3">Tải lên tài liệu mới</h4>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-2">Kéo thả file vào đây hoặc click để chọn</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => document.getElementById('contract-file-upload')?.click()}
+                  >
+                    Chọn file
+                  </Button>
+                  <input
+                    id="contract-file-upload"
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </div>
+                
+                {/* Display selected files */}
+                {selectedFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-medium">Files đã chọn:</p>
+                    <div className="space-y-1">
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">{file.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Upload Buttons */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSelectedFile(index)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                     <div className="flex space-x-2">
-                      <Button
-                        onClick={handleUploadFiles}
-                        disabled={selectedFiles.length === 0 || uploading}
-                        className="bg-blue-600 hover:bg-blue-700"
+                      <Button 
+                        onClick={handleUploadFiles} 
+                        disabled={uploading}
+                        className="flex-1"
                       >
                         {uploading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Đang upload...
+                            Đang tải lên...
                           </>
                         ) : (
                           <>
                             <Upload className="h-4 w-4 mr-2" />
-                            Upload {selectedFiles.length} file(s)
+                            Tải lên tài liệu
                           </>
                         )}
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          setShowUploadForm(false);
-                          setSelectedFiles([]);
-                        }}
+                        onClick={() => setSelectedFiles([])}
                       >
                         Hủy
                       </Button>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
+              {/* Existing Documents */}
               <div className="space-y-3">
+                <h4 className="text-sm font-medium">Tài liệu hiện có</h4>
+                {/* Hiển thị documents từ contract_documents table */}
+                {documents.length > 0 && documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{doc.document_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(doc.file_size / 1024 / 1024).toFixed(2)} MB • {doc.document_type} • 
+                          {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                        </p>
+                        {doc.uploaded_by_name && (
+                          <p className="text-xs text-muted-foreground">
+                            Upload bởi: {doc.uploaded_by_name}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleDownloadDocument(doc)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Tải xuống
+                    </Button>
+                  </div>
+                ))}
                 
-                {/* Hiển thị tài liệu từ database */}
-                {documents.length > 0 ? (
-                  documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg">
+                {/* Hiển thị attachments từ contract creation (JSON) - giống contractors */}
+                {currentContract.attachments && Array.isArray(currentContract.attachments) && currentContract.attachments.length > 0 && 
+                  currentContract.attachments.map((attachment: any, index: number) => (
+                    <div key={`attachment-${index}`} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex items-center space-x-3">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="font-medium">{doc.document_name}</p>
+                          <p className="font-medium">{attachment.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {(doc.file_size / 1024 / 1024).toFixed(2)} MB • {doc.document_type} • 
-                            {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                            {(attachment.size / 1024 / 1024).toFixed(2)} MB • {new Date(attachment.lastModified).toLocaleDateString('vi-VN')}
                           </p>
-                          {doc.uploaded_by_name && (
-                            <p className="text-xs text-muted-foreground">
-                              Upload bởi: {doc.uploaded_by_name}
-                            </p>
-                          )}
                         </div>
                       </div>
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleDownloadDocument(doc)}
+                        onClick={() => handleDownloadAttachment(attachment)}
                       >
                         <Download className="h-4 w-4 mr-2" />
                         Tải xuống
                       </Button>
                     </div>
                   ))
-                ) : (
-                  /* Hiển thị attachments từ contract nếu có */
-                  attachments.length > 0 ? (
-                    attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                            <p className="font-medium">{attachment.originalName}</p>
-                        <p className="text-sm text-muted-foreground">
-                              {(attachment.size / 1024 / 1024).toFixed(2)} MB • 
-                              {new Date(attachment.uploadedAt).toLocaleDateString("vi-VN")}
-                        </p>
-                      </div>
-                    </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDownloadDocument(attachment)}
-                        >
-                      <Download className="h-4 w-4 mr-2" />
-                      Tải xuống
-                    </Button>
+                }
+                
+                {/* Hiển thị khi không có tài liệu nào */}
+                {documents.length === 0 && (!currentContract.attachments || !Array.isArray(currentContract.attachments) || currentContract.attachments.length === 0) && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Chưa có tài liệu nào</p>
+                    <p className="text-sm">Tải lên tài liệu để quản lý hồ sơ hợp đồng</p>
                   </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <FileText className="h-8 w-8 mx-auto mb-2" />
-                      <p>Chưa có tài liệu nào</p>
-                    </div>
-                  )
                 )}
               </div>
             </CardContent>

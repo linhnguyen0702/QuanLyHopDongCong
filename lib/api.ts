@@ -156,6 +156,8 @@ class ApiClient {
           console.warn("Authorization Error (Forbidden):", errorInfo);
         } else if (response.status === 404) {
           console.warn("API Route not found:", errorInfo);
+        } else if (response.status === 400) {
+          console.warn("Bad Request Error:", errorInfo);
         }
 
         if (response.status === 401) {
@@ -168,8 +170,9 @@ class ApiClient {
         // Return the error response instead of throwing, so the calling code can handle it
         return {
           success: false,
-          message: data.message || "API request failed",
+          message: data.message || `API request failed (${response.status})`,
           errors: data.errors || [],
+          status: response.status,
           ...data,
         };
       }
@@ -418,6 +421,15 @@ export const contractorsApi = {
     bankAccount?: string;
     bankName?: string;
     description?: string;
+    shortName?: string;
+    businessRegistrationNumber?: string;
+    category?: string;
+    establishmentDate?: string;
+    website?: string;
+    representativeName?: string;
+    representativePosition?: string;
+    expertiseField?: string;
+    attachments?: any[];
   }) => apiClient.post("/contractors", data),
 
   update: (
@@ -432,6 +444,15 @@ export const contractorsApi = {
       bankAccount?: string;
       bankName?: string;
       description?: string;
+      shortName?: string;
+      businessRegistrationNumber?: string;
+      category?: string;
+      establishmentDate?: string;
+      website?: string;
+      representativeName?: string;
+      representativePosition?: string;
+      expertiseField?: string;
+      attachments?: any[];
     }
   ) => apiClient.put(`/contractors/${id}`, data),
 

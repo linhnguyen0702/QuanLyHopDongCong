@@ -55,6 +55,7 @@ import {
   Mail,
   TrendingUp,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ContractorForm } from "@/components/contractor-form";
 import { ContractorDetails } from "@/components/contractor-details";
 import { contractorsApi } from "@/lib/api";
@@ -70,6 +71,16 @@ type ContractorRow = {
   tax_code?: string;
   status?: string;
   created_at?: string;
+  // New fields
+  short_name?: string;
+  business_registration_number?: string;
+  category?: string;
+  establishment_date?: string;
+  website?: string;
+  representative_name?: string;
+  representative_position?: string;
+  expertise_field?: string;
+  attachments?: any[];
   stats?: {
     total_contracts: number;
     active_contracts: number;
@@ -82,35 +93,89 @@ export default function ContractorsPage() {
   const { collapsed } = useSidebar();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContractor, setSelectedContractor] = useState<any>(null);
+  const [contractorDetails, setContractorDetails] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [items, setItems] = useState<ContractorRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  // Load contractor details
+  const loadContractorDetails = async (contractorId: number) => {
+    try {
+      const res = await contractorsApi.getById(contractorId);
+      if (res?.success) {
+        const data: any = (res as any).data;
+        setContractorDetails({
+          ...data.contractor,
+          contracts: data.contracts,
+          stats: data.stats
+        });
+      } else {
+        setError((res as any)?.message || "Không thể tải chi tiết nhà thầu");
+      }
+    } catch (err) {
+      console.error("Error loading contractor details:", err);
+      setError("Có lỗi xảy ra khi tải chi tiết nhà thầu");
+    }
+  };
+
+  const loadContractors = async () => {
+    try {
+      setLoading(true);
+      const params: any = { 
+        page: 1, 
+        limit: 100
+      };
+      
+      // Chỉ thêm status nếu không phải "all"
+      if (filterStatus !== "all") {
+        params.status = filterStatus;
+      }
+      
+      // Chỉ thêm search nếu có giá trị
+      if (searchTerm && searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+      
+      const res = await contractorsApi.getAll(params);
+      if (res?.success) {
+        const data: any = (res as any).data;
+        const list = data?.contractors || data || [];
+        setItems(Array.isArray(list) ? list : []);
+        setError("");
+      } else {
+        setError((res as any)?.message || "Không thể tải dữ liệu nhà thầu. Hãy đăng nhập lại.");
+      }
+    } catch (err) {
+      console.error("Error loading contractors:", err);
+      setError("Có lỗi xảy ra khi tải danh sách nhà thầu");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
-      try {
-        // Lấy tất cả trạng thái: truyền status = "" để tránh default 'active' ở backend
-        const res = await contractorsApi.getAll({ page: 1, limit: 100, status: "" as any });
-        if (mounted && res?.success) {
-          const data: any = (res as any).data;
-          const list = data?.contractors || data || [];
-          setItems(Array.isArray(list) ? list : []);
-          setError("");
-        } else if (mounted) {
-          setError((res as any)?.message || "Không thể tải dữ liệu nhà thầu. Hãy đăng nhập lại.");
-        }
-      } finally {
-        mounted && setLoading(false);
+    
+    loadContractors();
+
+    // Listen for contractor creation events
+    const handleContractorCreated = () => {
+      if (mounted) {
+        loadContractors();
       }
     };
-    load();
+
+    window.addEventListener('contractorCreated', handleContractorCreated);
+
     return () => {
       mounted = false;
+      window.removeEventListener('contractorCreated', handleContractorCreated);
     };
-  }, []);
+  }, [filterStatus, searchTerm]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -163,11 +228,117 @@ export default function ContractorsPage() {
     ));
   };
 
-  const filteredContractors = items.filter(
-    (contractor) =>
-      (contractor.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (contractor.tax_code || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredContractors = items;
+
+  // Export to Excel function
+  const exportToExcel = async () => {
+    try {
+      const data = filteredContractors.map(contractor => ({
+        'Tên nhà thầu': contractor.name,
+        'Tên viết tắt': contractor.short_name || '',
+        'Mã số thuế': contractor.tax_code || '',
+        'Email': contractor.email,
+        'Số điện thoại': contractor.phone,
+        'Địa chỉ': contractor.address || '',
+        'Danh mục': contractor.category || '',
+        'Người đại diện': contractor.representative_name || contractor.contact_person || '',
+        'Chức vụ': contractor.representative_position || '',
+        'Trạng thái': contractor.status || 'active',
+        'Tổng hợp đồng': contractor.stats?.total_contracts || 0,
+        'Tổng giá trị': contractor.stats?.total_value || 0,
+        'Ngày tạo': contractor.created_at ? new Date(contractor.created_at).toLocaleDateString('vi-VN') : ''
+      }));
+
+      // Create CSV content
+      const headers = Object.keys(data[0] || {});
+      const csvContent = [
+        headers.join(','),
+        ...data.map(row => headers.map(header => `"${(row as any)[header] || ''}"`).join(','))
+      ].join('\n');
+
+      // Download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `danh_sach_nha_thau_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Export error:', error);
+      setError('Có lỗi xảy ra khi xuất file Excel');
+    }
+  };
+
+  // Export contractor profile function
+  const exportContractorProfile = async (contractor: ContractorRow) => {
+    try {
+      const profileData = {
+        'Tên nhà thầu': contractor.name,
+        'Tên viết tắt': contractor.short_name || '',
+        'Mã số thuế': contractor.tax_code || '',
+        'Số đăng ký kinh doanh': contractor.business_registration_number || '',
+        'Email': contractor.email,
+        'Số điện thoại': contractor.phone,
+        'Địa chỉ': contractor.address || '',
+        'Website': contractor.website || '',
+        'Danh mục': contractor.category || '',
+        'Người đại diện': contractor.representative_name || contractor.contact_person || '',
+        'Chức vụ': contractor.representative_position || '',
+        'Lĩnh vực chuyên môn': contractor.expertise_field || '',
+        'Ngày thành lập': contractor.establishment_date ? new Date(contractor.establishment_date).toLocaleDateString('vi-VN') : '',
+        'Trạng thái': contractor.status || 'active',
+        'Tổng hợp đồng': contractor.stats?.total_contracts || 0,
+        'Hợp đồng đang thực hiện': contractor.stats?.active_contracts || 0,
+        'Hợp đồng hoàn thành': contractor.stats?.completed_contracts || 0,
+        'Tổng giá trị': contractor.stats?.total_value || 0,
+        'Ngày tạo': contractor.created_at ? new Date(contractor.created_at).toLocaleDateString('vi-VN') : ''
+      };
+
+      // Create CSV content
+      const headers = Object.keys(profileData);
+      const csvContent = [
+        headers.join(','),
+        headers.map(header => `"${(profileData as any)[header] || ''}"`).join(',')
+      ].join('\n');
+
+      // Download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ho_so_nha_thau_${contractor.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Export profile error:', error);
+      setError('Có lỗi xảy ra khi xuất hồ sơ nhà thầu');
+    }
+  };
+
+  // Delete contractor function
+  const deleteContractor = async (contractor: ContractorRow) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa nhà thầu "${contractor.name}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await contractorsApi.delete(contractor.id);
+      if (res?.success) {
+        loadContractors();
+        setError('');
+      } else {
+        setError((res as any)?.message || 'Không thể xóa nhà thầu');
+      }
+    } catch (error) {
+      console.error('Delete contractor error:', error);
+      setError('Có lỗi xảy ra khi xóa nhà thầu');
+    }
+  };
 
   // Derived stats based on available backend fields
   const activeCount = items.filter((c) => (c.status || "active") === "active").length;
@@ -236,7 +407,10 @@ export default function ContractorsPage() {
                     Nhập thông tin chi tiết về nhà thầu mới
                   </DialogDescription>
                 </DialogHeader>
-                <ContractorForm onClose={() => setIsCreateDialogOpen(false)} />
+                <ContractorForm 
+                  onClose={() => setIsCreateDialogOpen(false)} 
+                  onSuccess={() => loadContractors()}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -262,11 +436,20 @@ export default function ContractorsPage() {
                         className="pl-10"
                       />
                     </div>
-                    <Button variant="outline">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Bộ lọc
-                    </Button>
-                    <Button variant="outline">
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Lọc theo trạng thái" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                        <SelectItem value="active">Hoạt động</SelectItem>
+                        <SelectItem value="pending">Chờ duyệt</SelectItem>
+                        <SelectItem value="suspended">Tạm dừng</SelectItem>
+                        <SelectItem value="blacklisted">Danh sách đen</SelectItem>
+                        <SelectItem value="inactive">Không hoạt động</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" onClick={exportToExcel}>
                       <Download className="h-4 w-4 mr-2" />
                       Xuất Excel
                     </Button>
@@ -292,7 +475,7 @@ export default function ContractorsPage() {
                         <TableHead>Thông tin nhà thầu</TableHead>
                         <TableHead>Liên hệ</TableHead>
                         <TableHead>Danh mục</TableHead>
-                        <TableHead>Đánh giá</TableHead>
+                        <TableHead>Người đại diện</TableHead>
                         <TableHead>Hợp đồng</TableHead>
                         <TableHead>Trạng thái</TableHead>
                         <TableHead className="text-right">Thao tác</TableHead>
@@ -305,8 +488,13 @@ export default function ContractorsPage() {
                             <div>
                               <p className="font-medium">{contractor.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {contractor.tax_code}
+                                {contractor.short_name || contractor.tax_code}
                               </p>
+                              {contractor.business_registration_number && (
+                                <p className="text-xs text-muted-foreground">
+                                  ĐKKD: {contractor.business_registration_number}
+                                </p>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -326,10 +514,17 @@ export default function ContractorsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">—</Badge>
+                            <Badge variant="outline">{contractor.category || "Khác"}</Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center space-x-1">—</div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">{contractor.representative_name || contractor.contact_person}</p>
+                              {contractor.representative_position && (
+                                <p className="text-xs text-muted-foreground">
+                                  {contractor.representative_position}
+                                </p>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
@@ -357,22 +552,34 @@ export default function ContractorsPage() {
                                 <DropdownMenuItem
                                   onClick={() => {
                                     setSelectedContractor(contractor);
+                                    loadContractorDetails(contractor.id);
                                     setIsDetailsDialogOpen(true);
                                   }}
                                 >
                                   <Eye className="h-4 w-4 mr-2" />
                                   Xem chi tiết
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    console.log('Edit contractor clicked:', contractor);
+                                    setSelectedContractor(contractor);
+                                    setIsEditDialogOpen(true);
+                                  }}
+                                >
                                   <Edit className="h-4 w-4 mr-2" />
                                   Chỉnh sửa
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => exportContractorProfile(contractor)}
+                                >
                                   <Download className="h-4 w-4 mr-2" />
                                   Xuất hồ sơ
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-red-600">
+                                <DropdownMenuItem 
+                                  className="text-red-600"
+                                  onClick={() => deleteContractor(contractor)}
+                                >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Xóa
                                 </DropdownMenuItem>
@@ -585,10 +792,35 @@ export default function ContractorsPage() {
                   Thông tin chi tiết và lịch sử hợp đồng
                 </DialogDescription>
               </DialogHeader>
-              {selectedContractor && (
+              {contractorDetails && (
                 <ContractorDetails
-                  contractor={selectedContractor}
+                  contractor={contractorDetails}
                   onClose={() => setIsDetailsDialogOpen(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Contractor Edit Dialog */}
+          <Dialog
+            open={isEditDialogOpen}
+            onOpenChange={setIsEditDialogOpen}
+          >
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Chỉnh sửa nhà thầu</DialogTitle>
+                <DialogDescription>
+                  Cập nhật thông tin nhà thầu
+                </DialogDescription>
+              </DialogHeader>
+              {selectedContractor && (
+                <ContractorForm 
+                  contractor={selectedContractor}
+                  onClose={() => setIsEditDialogOpen(false)} 
+                  onSuccess={() => {
+                    loadContractors();
+                    setIsEditDialogOpen(false);
+                  }}
                 />
               )}
             </DialogContent>

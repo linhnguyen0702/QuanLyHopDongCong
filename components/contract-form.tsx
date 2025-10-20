@@ -63,6 +63,35 @@ export function ContractForm({ onClose, contract, onSuccess }: ContractFormProps
     }
   }, [])
 
+  // Load contract data when editing
+  useEffect(() => {
+    if (contract?.id) {
+      // Load contract details to get attachments
+      contractsApi.getById(contract.id).then(res => {
+        console.log('Contract API response:', res);
+        if (res.success) {
+          const data = res.data as any;
+          console.log('Contract data:', data);
+          if (data.contract.attachments && Array.isArray(data.contract.attachments)) {
+            console.log('Found attachments:', data.contract.attachments);
+            // Convert attachments to File objects for display
+            const files = data.contract.attachments.map((att: any) => {
+              // Use window.File to avoid conflict with lucide-react File icon
+              const file = new window.File([''], att.name, {
+                type: att.type,
+                lastModified: att.lastModified
+              });
+              // Set size property
+              Object.defineProperty(file, 'size', { value: att.size });
+              return file;
+            });
+            setUploadedFiles(files);
+          }
+        }
+      });
+    }
+  }, [contract?.id])
+
   // Debug logging for contract data
   useEffect(() => {
     if (contract) {
@@ -112,10 +141,16 @@ export function ContractForm({ onClose, contract, onSuccess }: ContractFormProps
       formDataToSend.append('deliverables', formData.deliverables?.trim() || '')
       formDataToSend.append('paymentTerms', formData.paymentTerms?.trim() || '')
       
-      // Add files
-      uploadedFiles.forEach((file, index) => {
-        formDataToSend.append('attachments', file)
-      })
+      // Add attachments info for JSON storage (like contractors)
+      const attachmentsInfo = uploadedFiles.map(file => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      }));
+      
+      // Add attachments to form data
+      formDataToSend.append('attachments', JSON.stringify(attachmentsInfo));
 
       if (contract?.id) {
         // Update existing contract
@@ -400,7 +435,7 @@ export function ContractForm({ onClose, contract, onSuccess }: ContractFormProps
                 <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded border">
                   <div className="flex items-center space-x-2">
                     <File className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm">{attachment.originalName}</span>
+                    <span className="text-sm">{attachment.name}</span>
                     <span className="text-xs text-muted-foreground">
                       ({(attachment.size / 1024).toFixed(1)} KB)
                     </span>
