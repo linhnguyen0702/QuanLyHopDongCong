@@ -75,21 +75,8 @@ export function ContractorForm({ onClose, contractor, onSuccess }: ContractorFor
           console.log('Contractor attachments field:', data.attachments);
           if (data.attachments && Array.isArray(data.attachments)) {
             console.log('Found attachments:', data.attachments);
-            // Set existing attachments for display
+            // Set existing attachments for display only; do NOT convert to File objects
             setExistingAttachments(data.attachments);
-            // Convert attachments to File objects for display
-            const files = data.attachments.map((att: any) => {
-              // Use window.File to avoid conflict with lucide-react File icon
-              const file = new window.File([''], att.name, {
-                type: att.type || 'application/octet-stream',
-                lastModified: att.lastModified || Date.now()
-              });
-              // Set size property
-              Object.defineProperty(file, 'size', { value: att.size || 0 });
-              return file;
-            });
-            console.log('Converted files:', files);
-            setUploadedFiles(files);
           } else {
             console.log('No attachments found in contractor data');
             setExistingAttachments([]);
@@ -185,10 +172,23 @@ export function ContractorForm({ onClose, contractor, onSuccess }: ContractorFor
       console.log('API response:', res)
 
       if (res?.success) {
+        // If created/updated successfully and there are files, upload only newly selected files (non-zero size)
+        try {
+          const contractorId = contractor ? contractor.id : (res.data?.id || res.data?.insertId);
+          const filesToUpload = uploadedFiles.filter(f => (typeof f.size === 'number' ? f.size > 0 : true));
+          if (contractorId && filesToUpload.length > 0) {
+            await contractorsApi.uploadDocuments(contractorId, filesToUpload);
+          }
+        } catch (uploadErr) {
+          console.error('Post-create upload error:', uploadErr);
+        }
+
         toast({
           title: "Thành công",
           description: contractor ? "Đã cập nhật nhà thầu" : "Đã thêm nhà thầu mới",
         })
+        // Clear newly selected files after submit
+        setUploadedFiles([])
         onClose()
         // Call success callback if provided
         if (onSuccess) {

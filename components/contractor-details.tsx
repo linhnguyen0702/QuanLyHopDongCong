@@ -22,6 +22,10 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { documentsApi, contractsApi } from "@/lib/api"
+import { contractorsApi } from "@/lib/api"
+import { ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 interface ContractorDetailsProps {
   contractor: any
@@ -33,12 +37,25 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
+  const [monthlyPerformance, setMonthlyPerformance] = useState<any[]>([]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
     }).format(amount)
+  }
+
+  const formatCurrencyCompact = (amount: number) => {
+    try {
+      return new Intl.NumberFormat('vi-VN', { notation: 'compact', compactDisplay: 'short', maximumFractionDigits: 1 }).format(amount);
+    } catch {
+      // Fallback simple formatter
+      if (amount >= 1_000_000_000) return `${Math.round(amount/1_000_000_000)} tỷ`;
+      if (amount >= 1_000_000) return `${Math.round(amount/1_000_000)} triệu`;
+      if (amount >= 1_000) return `${Math.round(amount/1_000)} nghìn`;
+      return `${amount}`;
+    }
   }
 
   const getRatingStars = (rating: number) => {
@@ -127,12 +144,12 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
     setUploadedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Upload documents to contractor
+  // Upload documents to contractor (similar to contracts)
   const uploadDocuments = async () => {
     if (uploadedFiles.length === 0) {
       toast({
         title: "Lỗi",
-        description: "Vui lòng chọn ít nhất một file để tải lên",
+        description: "Vui lòng chọn ít nhất một file để tải lên",  
         variant: "destructive"
       })
       return
@@ -146,7 +163,7 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
       })
 
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`http://localhost:5000/api/contractors/${contractor.id}/documents`, {
+      const response = await fetch(`http://localhost:5000/api/contractors/${contractor.id}/documents`, {                                                        
         method: 'POST',
         body: formData,
         headers: {
@@ -159,7 +176,7 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
       if (result.success) {
         toast({
           title: "Thành công",
-          description: "Đã tải lên tài liệu thành công",
+          description: `Đã tải lên ${result.data.files.length} tài liệu thành công`,
         })
         setUploadedFiles([])
         // Refresh contractor data or trigger parent refresh
@@ -167,7 +184,7 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
       } else {
         toast({
           title: "Lỗi",
-          description: result.message || "Không thể tải lên tài liệu",
+          description: result.message || "Không thể tải lên tài liệu", 
           variant: "destructive"
         })
       }
@@ -182,6 +199,119 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
       setIsUploading(false)
     }
   }
+
+  // Download contractor document (similar to contracts)
+  const handleDownloadDocument = async (doc: any) => {
+    try {
+      // Helper to download via authenticated fetch + blob
+      const downloadWithAuth = async (url: string, fallbackName: string) => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Download failed (${response.status})`);
+        }
+
+        // Try to get filename from Content-Disposition
+        const dispo = response.headers.get('Content-Disposition') || response.headers.get('content-disposition') || '';
+        let filename = fallbackName;
+        const match = dispo.match(/filename="?([^";]+)"?/i);
+        if (match && match[1]) {
+          try {
+            // Decode RFC5987 or percent-encoding if present
+            filename = decodeURIComponent(match[1]);
+          } catch {
+            filename = match[1];
+          }
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || fallbackName || 'download';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+      };
+
+      // If it's a document from contractor_documents table, fetch from API with auth
+      if (doc.id) {
+        const url = `http://localhost:5000/api/contractors/download-document/${doc.id}`;
+        await downloadWithAuth(url, doc.document_name || 'document');
+        toast({
+          title: "Thành công",
+          description: `Đang tải xuống ${doc.document_name || 'tài liệu'}`,
+        });
+        return;
+      }
+
+      // Handle attachments from contractor creation (JSON) if path/filename is available
+      if ((doc.name || doc.originalName) && (doc.filename || doc.path)) {
+        const filename = encodeURIComponent(doc.filename || doc.name || 'attachment');
+        const url = `http://localhost:5000/api/contractors/download-attachment/${contractor.id}/${filename}`;
+        await downloadWithAuth(url, doc.name || doc.originalName || 'attachment');
+        toast({
+          title: "Thành công",
+          description: `Đang tải xuống ${doc.name || doc.originalName}`,
+        });
+        return;
+      }
+
+      // Fallback when no server file is available
+      const docContent = `
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>${doc.name || 'document'}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 40px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .content { line-height: 1.6; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>${doc.name || 'Tài liệu'}</h1>
+              <p><em>Nhà thầu: ${contractor.name}</em></p>
+            </div>
+            <div class="content">
+              <p>Không tìm thấy file gốc trên máy chủ. Đây là nội dung mẫu để tải xuống.</p>
+              <p>Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const blob = new Blob([docContent], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = (doc.name || 'document').replace(/\.[^/.]+$/, '') + '.html';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Lưu ý",
+        description: "Không tìm thấy file gốc, đã tải xuống nội dung mẫu (.html)",
+      });
+    } catch (error) {
+      console.error("Download document error:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tải xuống tài liệu",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -402,12 +532,19 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Tổng giá trị</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Tổng giá trị</CardTitle>        
+                <DollarSign className="h-4 w-4 text-muted-foreground" />        
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(contractor.stats?.total_value || 0)}</div>
-                <p className="text-xs text-muted-foreground">Tổng giá trị hợp đồng</p>
+              <CardContent className="pl-2">
+                <div className="text-2xl font-bold leading-tight">
+                  {formatCurrencyCompact(contractor.stats?.total_value || 0)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <span>Chi tiết:</span>
+                  <div className="ml-2 text-foreground whitespace-nowrap text-[11px] leading-snug">
+                    {formatCurrency(contractor.stats?.total_value || 0)}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -416,11 +553,11 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
                 <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
                 <CheckCircle className="h-4 w-4 text-green-600" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-3">
                 <div className="text-2xl font-bold text-green-600">{contractor.stats?.completed_contracts || 0}</div>
                 <p className="text-xs text-muted-foreground">
                   {contractor.stats?.total_contracts > 0 
-                    ? Math.round(((contractor.stats?.completed_contracts || 0) / contractor.stats?.total_contracts) * 100)
+                    ? Math.round(((contractor.stats?.completed_contracts || 0) / (contractor.stats?.total_contracts || 1)) * 100)
                     : 0}% tỷ lệ hoàn thành
                 </p>
               </CardContent>
@@ -438,16 +575,32 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
             </Card>
           </div>
 
-          {/* Performance Chart Placeholder */}
+          {/* Performance Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Biểu đồ hiệu suất</CardTitle>
-              <CardDescription>Theo dõi hiệu suất qua các năm</CardDescription>
+              <CardDescription>Giá trị hợp đồng theo tháng</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-64 flex items-center justify-center border-2 border-dashed border-border rounded-lg">
-                <p className="text-muted-foreground">Biểu đồ hiệu suất sẽ được hiển thị ở đây</p>
-              </div>
+              {monthlyPerformance && monthlyPerformance.length > 0 ? (
+                <ChartContainer
+                  config={{ value: { label: 'Giá trị (VND)', color: 'hsl(262,83%,57%)' } }}
+                  className="w-full"
+                >
+                  <AreaChart data={monthlyPerformance} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(v) => `${Math.round(v/1_000_000)}M`} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area type="monotone" dataKey="value" stroke="var(--color-value)" fill="var(--color-value)" fillOpacity={0.15} />
+                    <ChartLegend />
+                  </AreaChart>
+                </ChartContainer>
+              ) : (
+                <div className="h-64 flex items-center justify-center border-2 border-dashed border-border rounded-lg">
+                  <p className="text-muted-foreground">Chưa có dữ liệu biểu đồ</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -522,30 +675,43 @@ export function ContractorDetails({ contractor, onClose, onEdit }: ContractorDet
 
               {/* Existing Documents */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium">Tài liệu hiện có</h4>
-                {contractor.attachments && contractor.attachments.length > 0 ? (
-                  contractor.attachments.map((doc: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{doc.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {(doc.size / 1024 / 1024).toFixed(2)} MB • {new Date(doc.lastModified).toLocaleDateString('vi-VN')}
+                <h4 className="text-sm font-medium">Tài liệu hiện có</h4> 
+                
+                {/* Display documents from contractor_documents table */}
+                {contractor.documents && contractor.documents.length > 0 && contractor.documents.map((doc: any) => (
+                  <div key={`doc-${doc.id}`} className="flex items-center justify-between p-3 border rounded-lg">                                                        
+                    <div className="flex items-center space-x-3">
+                      <FileText className="h-4 w-4 text-muted-foreground" />    
+                      <div>
+                        <p className="font-medium">{doc.document_name}</p>      
+                        <p className="text-sm text-muted-foreground">
+                          {(doc.file_size / 1024 / 1024).toFixed(2)} MB • {doc.document_type} •                                                             
+                          {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                        </p>
+                        {doc.uploaded_by_name && (
+                          <p className="text-xs text-muted-foreground">
+                            Upload bởi: {doc.uploaded_by_name}
                           </p>
-                        </div>
+                        )}
                       </div>
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Tải xuống
-                      </Button>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadDocument(doc)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Tải xuống
+                    </Button>
+                  </div>
+                ))}
+
+                {/* Hide JSON attachments from contractor creation to avoid duplicate/undownloadable entries */}
+                {(!contractor.documents || contractor.documents.length === 0) && (!contractor.attachments || contractor.attachments.length === 0) && (
+                  <div className="text-center py-8 text-muted-foreground">      
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />  
                     <p>Chưa có tài liệu nào</p>
-                    <p className="text-sm">Tải lên tài liệu để quản lý hồ sơ nhà thầu</p>
+                    <p className="text-sm">Tải lên tài liệu để quản lý hồ sơ nhà thầu</p>                                                     
                   </div>
                 )}
               </div>

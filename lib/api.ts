@@ -462,6 +462,58 @@ export const contractorsApi = {
 
   getPerformance: (id: number) =>
     apiClient.get(`/contractors/${id}/performance`),
+
+  // Upload documents to existing contractor
+  uploadDocuments: (contractorId: number, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    const token = getAuthToken();
+    return fetch(`${API_BASE_URL}/contractors/${contractorId}/documents`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    }).then(res => res.json());
+  },
+
+  // Download contractor document
+  downloadDocument: (documentId: number) => {
+    const token = getAuthToken();
+    const url = `${API_BASE_URL}/contractors/download-document/${documentId}`;
+
+    // Create a temporary link to download the file
+    const link = document.createElement('a');
+    link.href = url;
+    if (token) {
+      link.href += `?token=${token}`;
+    }
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
+
+  // Download contractor attachment
+  downloadAttachment: (contractorId: number, filename: string) => {
+    const token = getAuthToken();
+    const url = `${API_BASE_URL}/contractors/download-attachment/${contractorId}/${encodeURIComponent(filename)}`;
+
+    // Create a temporary link to download the file
+    const link = document.createElement('a');
+    link.href = url;
+    if (token) {
+      link.href += `?token=${token}`;
+    }
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
 };
 
 // Users API

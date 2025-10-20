@@ -1,7 +1,8 @@
 const express = require("express")
 const { pool } = require("../config/database")
-const { authenticateToken, requireRole, logActivity } = require("../middleware/auth")
-const { validateContractor, validateId, validatePagination } = require("../middleware/validation")
+const { authenticateToken, requireRole, logActivity } = require("../middleware/auth")                                                                           
+const { validateContractor, validateId, validatePagination } = require("../middleware/validation")                                                              
+const { handleUpload } = require("../middleware/upload")
 
 const router = express.Router()
 
@@ -178,6 +179,18 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
       [id],
     )
 
+    // Get contractor documents (similar to contracts)
+    const [documents] = await pool.execute(
+      `
+      SELECT cd.*, u.full_name as uploaded_by_name
+      FROM contractor_documents cd
+      LEFT JOIN users u ON cd.uploaded_by = u.id
+      WHERE cd.contractor_id = ?
+      ORDER BY cd.created_at DESC
+    `,
+      [id],
+    )
+
     // Parse attachments from JSON
     let attachments = [];
     if (contractors[0].attachments) {
@@ -186,18 +199,18 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
         if (typeof contractors[0].attachments === 'string') {
           // If it's a string, try to parse it
           if (contractors[0].attachments === '[object Object]') {
-            console.log('Attachments is [object Object], setting empty array');
+            console.log('Attachments is [object Object], setting empty array'); 
             attachments = [];
           } else {
             attachments = JSON.parse(contractors[0].attachments);
-            console.log('Contractor attachments parsed from string:', attachments);
+            console.log('Contractor attachments parsed from string:', attachments);                                                                             
           }
         } else if (typeof contractors[0].attachments === 'object') {
-          // If it's already an object (MySQL JSON type), use it directly
+          // If it's already an object (MySQL JSON type), use it directly       
           attachments = contractors[0].attachments;
           console.log('Contractor attachments is already object:', attachments);
         } else {
-          console.log('Attachments is neither string nor object:', typeof contractors[0].attachments);
+          console.log('Attachments is neither string nor object:', typeof contractors[0].attachments);                                                          
           attachments = [];
         }
       } catch (e) {
@@ -213,6 +226,7 @@ router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
       data: {
         contractor: contractors[0],
         contracts,
+        documents,
         attachments,
         stats: stats[0] || {
           total_contracts: 0,
@@ -521,87 +535,148 @@ router.get("/:id/performance", validateId, logActivity("VIEW"), async (req, res)
   }
 })
 
-// Upload documents for contractor
-router.post("/:id/documents", validateId, logActivity("UPLOAD"), async (req, res) => {
+// Upload documents for contractor (similar to contracts)
+router.post("/:id/documents", handleUpload, validateId, logActivity("UPLOAD"), async (req, res) => {                                                           
   try {
-    const { id } = req.params
-    
+    const { id } = req.params;
+
     // Check if contractor exists
-    const [contractors] = await pool.execute("SELECT id FROM contractors WHERE id = ?", [id])
-    
+    const [contractors] = await pool.execute("SELECT id FROM contractors WHERE id = ?", [id]);
+
     if (contractors.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Contractor not found",
-      })
+        message: "Không tìm thấy nhà thầu"
+      });
     }
 
-    // Handle file upload using multer middleware
-    const upload = require("../middleware/upload")
-    
-    upload.array('files', 10)(req, res, async (err) => {
-      if (err) {
-        console.error("Upload error:", err)
-        return res.status(400).json({
-          success: false,
-          message: "File upload failed",
-        })
-      }
-
-      try {
-        const files = req.files || []
-        
-        if (files.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: "No files uploaded",
-          })
-        }
-
-        // Get existing attachments
-        const [existingContractors] = await pool.execute("SELECT attachments FROM contractors WHERE id = ?", [id])
-        const existingAttachments = existingContractors[0]?.attachments ? JSON.parse(existingContractors[0].attachments) : []
-
-        // Add new files to attachments
-        const newAttachments = files.map(file => ({
-          name: file.originalname,
-          size: file.size,
-          type: file.mimetype,
-          path: file.path,
-          uploadedAt: new Date().toISOString()
-        }))
-
-        const updatedAttachments = [...existingAttachments, ...newAttachments]
-
-        // Update contractor with new attachments
+    // Save uploaded files to contractor_documents table (similar to contract_documents)
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
         await pool.execute(
-          "UPDATE contractors SET attachments = ?, updated_at = NOW() WHERE id = ?",
-          [JSON.stringify(updatedAttachments), id]
-        )
-
-        res.json({
-          success: true,
-          message: `Successfully uploaded ${files.length} file(s)`,
-          data: {
-            uploadedFiles: newAttachments,
-            totalFiles: updatedAttachments.length
-          }
-        })
-      } catch (error) {
-        console.error("Error processing uploaded files:", error)
-        res.status(500).json({
-          success: false,
-          message: "Internal server error",
-        })
+          `INSERT INTO contractor_documents (
+            contractor_id, document_name, file_path, file_size,
+            document_type, mime_type, uploaded_by, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            id,
+            file.originalname,
+            file.path,
+            file.size,
+            'other', // Default document type
+            file.mimetype,
+            req.user.userId
+          ]
+        );
       }
-    })
+
+      res.json({
+        success: true,
+        message: `Đã upload ${req.files.length} tài liệu thành công`,     
+        data: {
+          files: req.files.map(file => ({
+            name: file.originalname,
+            size: file.size,
+            type: file.mimetype
+          }))
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "Không có tài liệu nào được upload"
+      });
+    }
+
   } catch (error) {
-    console.error("Upload documents error:", error)
+    console.error("Upload documents error:", error);
     res.status(500).json({
       success: false,
-      message: "Internal server error",
-    })
+      message: "Lỗi khi upload tài liệu",
+      error: error.message
+    });
   }
-})
+});
+
+// Download contractor attachment
+router.get("/download-attachment/:id/:filename", async (req, res) => {
+  try {
+    const { id, filename } = req.params;
+
+    // Get contractor attachments
+    const [contractors] = await pool.execute("SELECT attachments FROM contractors WHERE id = ?", [id]);
+
+    if (contractors.length === 0) {
+      return res.status(404).json({ success: false, message: "Contractor not found" });
+    }
+
+    let attachments = [];
+    if (contractors[0].attachments) {
+      try {
+        attachments = JSON.parse(contractors[0].attachments);
+      } catch (e) {
+        console.error('Error parsing attachments:', e);
+        return res.status(500).json({ success: false, message: "Error parsing attachments" });
+      }
+    }
+
+    // Find the attachment by provided filename key
+    const attachment = attachments.find(att => att.filename === filename || att.name === filename);
+    if (!attachment || !attachment.path) {
+      return res.status(404).json({ success: false, message: "Attachment not found or no file path" });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const absolutePath = path.isAbsolute(attachment.path)
+      ? attachment.path
+      : path.join(__dirname, '..', attachment.path);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ success: false, message: "File not found on server" });
+    }
+
+    // Use res.download to handle unicode filenames safely
+    return res.download(absolutePath, attachment.originalName || attachment.name || 'attachment');
+  } catch (error) {
+    console.error("Download attachment error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Download contractor document
+router.get("/download-document/:documentId", async (req, res) => {
+  try {
+    const { documentId } = req.params;
+
+    // Get document info
+    const [documents] = await pool.execute(
+      "SELECT * FROM contractor_documents WHERE id = ?",
+      [documentId]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, message: "Document not found" });
+    }
+
+    const document = documents[0];
+
+    const fs = require('fs');
+    const path = require('path');
+    const absolutePath = path.isAbsolute(document.file_path)
+      ? document.file_path
+      : path.join(__dirname, '..', document.file_path);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ success: false, message: "File not found on server" });
+    }
+
+    // Use res.download to stream and set headers with proper filename
+    return res.download(absolutePath, document.document_name || 'document');
+  } catch (error) {
+    console.error("Download document error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 module.exports = router

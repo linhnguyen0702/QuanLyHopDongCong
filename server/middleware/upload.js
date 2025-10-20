@@ -4,17 +4,31 @@ const path = require('path');
 // Cấu hình storage cho multer
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '../uploads/contracts'));
+    cb(null, path.join(__dirname, '../uploads/documents'));
   },
   filename: function (req, file, cb) {
+    // Decode originalname from latin1 -> utf8 to avoid mojibake
+    let decodedOriginal = '';
+    try {
+      decodedOriginal = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    } catch (_) {
+      decodedOriginal = file.originalname;
+    }
+
+    // Recompute extension based on decoded name
+    const extension = path.extname(decodedOriginal);
+    const nameWithoutExt = decodedOriginal.replace(new RegExp(`${extension}$`), '');
+
     // Tạo tên file unique với timestamp
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const extension = path.extname(file.originalname);
-    const name = path.basename(file.originalname, extension);
-    
-    // Encode tên file để tránh lỗi font chữ
-    const encodedName = Buffer.from(name, 'utf8').toString('base64');
-    cb(null, `${encodedName}-${uniqueSuffix}${extension}`);
+
+    // Giữ nguyên tên file gốc với thay thế ký tự nguy hiểm
+    const safeName = nameWithoutExt.replace(/[\\/:*?"<>|]/g, '_');
+
+    // Propagate decoded name to downstream handlers
+    file.originalname = decodedOriginal;
+
+    cb(null, `${safeName}-${uniqueSuffix}${extension}`);
   }
 });
 

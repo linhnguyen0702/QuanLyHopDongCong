@@ -111,6 +111,8 @@ export default function ContractorsPage() {
         setContractorDetails({
           ...data.contractor,
           contracts: data.contracts,
+          documents: data.documents,
+          attachments: data.attachments,
           stats: data.stats
         });
       } else {
