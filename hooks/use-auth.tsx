@@ -100,6 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
 
+        // Expose session globally so api client can forward email header
+        if (typeof window !== 'undefined') {
+          (window as any).nextauthSession = session as any;
+        }
+
         setUser(nextAuthUser);
         setLoading(false);
         return;

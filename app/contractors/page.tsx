@@ -428,7 +428,7 @@ export default function ContractorsPage() {
               {/* Filters and Search */}
               <Card>
                 <CardContent className="pt-6">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-4 border border-gray-300 rounded-lg p-4 bg-background">
                     <div className="relative flex-1 max-w-md">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -439,7 +439,7 @@ export default function ContractorsPage() {
                       />
                     </div>
                     <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger className="w-[180px]">
+                      <SelectTrigger className="w-[180px] h-9 rounded-md border border-gray-300 bg-transparent px-4 shadow-none hover:bg-muted focus:outline-none focus:ring-0">
                         <SelectValue placeholder="Lọc theo trạng thái" />
                       </SelectTrigger>
                       <SelectContent>
@@ -451,7 +451,7 @@ export default function ContractorsPage() {
                         <SelectItem value="inactive">Không hoạt động</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" onClick={exportToExcel}>
+                    <Button variant="outline" onClick={exportToExcel} className="h-9 border border-gray-300">
                       <Download className="h-4 w-4 mr-2" />
                       Xuất Excel
                     </Button>

@@ -83,6 +83,16 @@ export default function ContractsPage() {
   const { collapsed } = useSidebar();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    | "all"
+    | "pending"
+    | "approved"
+    | "active"
+    | "completed"
+    | "rejected"
+    | "cancelled"
+    | "expired"
+  >("all");
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -136,7 +146,11 @@ export default function ContractsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "draft":
-        return <Badge variant="outline">Nháp</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Chờ phê duyệt
+          </Badge>
+        );
       case "pending_approval":
         return (
           <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
@@ -185,12 +199,36 @@ export default function ContractsPage() {
     }).format(amount);
   };
 
-  const filteredContracts = items.filter(
-    (contract) =>
+  const filteredContracts = items.filter((contract) => {
+    const matchesSearch =
       (contract.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (contract.contractor_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (contract.contract_number || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      (contract.contract_number || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter === "all") return true;
+
+    const status = (contract.status || "").toLowerCase();
+    switch (statusFilter) {
+      case "pending":
+        return status === "pending_approval" || status === "draft";
+      case "approved":
+        return status === "approved";
+      case "active":
+        return status === "active";
+      case "completed":
+        return status === "completed";
+      case "rejected":
+        return status === "rejected";
+      case "cancelled":
+        return status === "cancelled";
+      case "expired":
+        return status === "expired";
+      default:
+        return true;
+    }
+  });
 
   // Xử lý xóa hợp đồng
   const handleDeleteContract = async () => {
@@ -457,10 +495,22 @@ export default function ContractsPage() {
                     className="pl-10"
                   />
                 </div>
-                <Button variant="outline">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Bộ lọc
-                </Button>
+                <div className="flex items-center">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="h-9 rounded-md border px-2 text-sm bg-background"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="pending">Chờ phê duyệt</option>
+                    <option value="approved">Đã phê duyệt</option>
+                    <option value="active">Đang thực hiện</option>
+                    <option value="completed">Hoàn thành</option>
+                    <option value="rejected">Đã từ chối</option>
+                    <option value="cancelled">Đã hủy</option>
+                    <option value="expired">Hết hạn</option>
+                  </select>
+                </div>
                 <Button variant="outline" onClick={handleExportExcel}>
                   <Download className="h-4 w-4 mr-2" />
                   Xuất Excel

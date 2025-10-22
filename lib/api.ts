@@ -1,6 +1,6 @@
 // API configuration and utilities
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 // Types
 export interface ApiResponse<T = any> {
@@ -92,6 +92,10 @@ class ApiClient {
       headers: {
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }),
+        // Try forwarding NextAuth session email so backend can map role
+        ...(typeof window !== 'undefined' && (window as any).nextauthSession?.user?.email
+          ? { 'x-user-email': (window as any).nextauthSession.user.email }
+          : {}),
         ...options.headers,
       },
       ...options,
@@ -364,7 +368,11 @@ export const contractsApi = {
 
   delete: (id: number) => apiClient.delete(`/contracts/${id}`),
 
-  approve: (id: number) => apiClient.put(`/contracts/${id}/approve`),
+  approve: (id: number, comments?: string) => apiClient.put(`/contracts/${id}/approve`, { comments }),
+
+  reject: (id: number, reason: string) => apiClient.put(`/contracts/${id}/reject`, { reason }),
+
+  getForApproval: (status?: string) => apiClient.get("/contracts/approvals", { status }),
 
   getStats: () => apiClient.get("/contracts/stats/overview"),
 

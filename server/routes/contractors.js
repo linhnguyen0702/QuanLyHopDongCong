@@ -6,8 +6,11 @@ const { handleUpload } = require("../middleware/upload")
 
 const router = express.Router()
 
-// Apply authentication to all routes
-router.use(authenticateToken)
+// Apply authentication to non-GET routes; allow GET without token for Google login
+router.use((req, res, next) => {
+  if (req.method === 'GET') return next();
+  return authenticateToken(req, res, next);
+})
 
 // Get all contractors
 router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
@@ -678,5 +681,69 @@ router.get("/download-document/:documentId", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+// Get contractor statistics for dashboard
+router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
+  try {
+    // Total contractors
+    const [totalResult] = await pool.execute("SELECT COUNT(*) as total FROM contractors")
+    const totalContractors = totalResult[0].total
+
+    // New contractors this month
+    const [thisMonthResult] = await pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM contractors 
+      WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+    `)
+    const thisMonthContractors = thisMonthResult[0].count
+
+    // New contractors last month
+    const [lastMonthResult] = await pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM contractors 
+      WHERE YEAR(created_at) = YEAR(CURDATE() - INTERVAL 1 MONTH) 
+      AND MONTH(created_at) = MONTH(CURDATE() - INTERVAL 1 MONTH)
+    `)
+    const lastMonthContractors = lastMonthResult[0].count
+
+    // Calculate percentage change
+    const contractorsChangePercent = lastMonthContractors > 0 
+      ? Math.round(((thisMonthContractors - lastMonthContractors) / lastMonthContractors) * 100 * 10) / 10
+      : thisMonthContractors > 0 ? 0 : 0  // If no data last month, show 0% change
+
+    // Contractors by status
+    const [statusResult] = await pool.execute(`
+      SELECT status, COUNT(*) as count 
+      FROM contractors 
+      GROUP BY status
+    `)
+
+    // Active contractors
+    const [activeResult] = await pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM contractors 
+      WHERE status = 'active'
+    `)
+    const activeContractors = activeResult[0].count
+
+    res.json({
+      success: true,
+      data: {
+        totalContractors,
+        thisMonthContractors,
+        lastMonthContractors,
+        contractorsChangePercent,
+        activeContractors,
+        statusBreakdown: statusResult,
+      },
+    })
+  } catch (error) {
+    console.error("Get contractor stats error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Lỗi hệ thống nội bộ",
+    })
+  }
+})
 
 module.exports = router

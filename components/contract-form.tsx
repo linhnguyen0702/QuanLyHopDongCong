@@ -530,9 +530,6 @@ export function ContractForm({ onClose, contract, onSuccess }: ContractFormProps
         <Button type="button" variant="outline" onClick={onClose}>
           Hủy
         </Button>
-        <Button type="button" variant="outline">
-          Lưu nháp
-        </Button>
         <Button type="submit" disabled={isSubmitting} className="bg-[#7C3AED] hover:bg-[#7C3AED]/90">
           {isSubmitting 
             ? "Đang xử lý..." 

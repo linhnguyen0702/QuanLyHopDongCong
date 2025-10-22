@@ -56,6 +56,12 @@ export default function Dashboard() {
   const [contractorsTotal, setContractorsTotal] = useState<number | null>(null);
   const [recentContracts, setRecentContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
+  // New stats for real calculations
+  const [contractsChangePercent, setContractsChangePercent] = useState<number | null>(null);
+  const [valueChangePercent, setValueChangePercent] = useState<number | null>(null);
+  const [performance, setPerformance] = useState<number | null>(null);
+  const [newContractorsThisMonth, setNewContractorsThisMonth] = useState<number | null>(null);
 
   const handleCreateContract = () => {
     setIsContractDialogOpen(true);
@@ -79,8 +85,9 @@ export default function Dashboard() {
 
     const loadData = async () => {
       try {
-        const [statsRes, contractorsRes, recentRes] = await Promise.all([
+        const [statsRes, contractorsStatsRes, contractorsRes, recentRes] = await Promise.all([
           contractsApi.getStats(),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/contractors/stats/overview`).then(res => res.json()),
           contractorsApi.getAll({ page: 1, limit: 1 }),
           contractsApi.getAll({ page: 1, limit: 3 }),
         ]);
@@ -95,14 +102,26 @@ export default function Dashboard() {
             );
             setExpiringCount(data.expiringCount ?? null);
             setOverdueCount(data.overdueCount ?? null);
+            setContractsChangePercent(data.contractsChangePercent ?? null);
+            setValueChangePercent(data.valueChangePercent ?? null);
+            setPerformance(data.performance ?? null);
+          }
+
+          if (contractorsStatsRes?.success && contractorsStatsRes.data) {
+            const data = contractorsStatsRes.data;
+            setContractorsTotal(data.totalContractors ?? null);
+            setNewContractorsThisMonth(data.thisMonthContractors ?? null);
           }
 
           if (contractorsRes?.success && (contractorsRes as any).data) {
             const d: any = (contractorsRes as any).data;
             const pagination = d?.pagination;
-            setContractorsTotal(
-              pagination?.total ?? (Array.isArray(d?.contractors) ? d.contractors.length : null)
-            );
+            // Fallback to pagination total if stats API fails
+            if (contractorsTotal === null) {
+              setContractorsTotal(
+                pagination?.total ?? (Array.isArray(d?.contractors) ? d.contractors.length : null)
+              );
+            }
           }
 
           if (recentRes?.success && (recentRes as any).data) {
@@ -111,6 +130,7 @@ export default function Dashboard() {
           }
         }
       } catch (e) {
+        console.error('Dashboard data loading error:', e);
         // keep graceful fallbacks
       } finally {
         mounted && setLoading(false);
@@ -171,8 +191,13 @@ export default function Dashboard() {
                     {totalContracts !== null ? totalContracts : "--"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    <span className="text-green-600">+12%</span> so với tháng
-                    trước
+                    {contractsChangePercent !== null ? (
+                      <span className={contractsChangePercent >= 0 ? "text-green-600" : "text-red-600"}>
+                        {contractsChangePercent >= 0 ? "+" : ""}{contractsChangePercent}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">--</span>
+                    )} so với tháng trước
                   </p>
                 </CardContent>
               </Card>
@@ -192,7 +217,11 @@ export default function Dashboard() {
                     {contractorsTotal !== null ? contractorsTotal : "--"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    <span className="text-green-600">+3</span> nhà thầu mới
+                    {newContractorsThisMonth !== null ? (
+                      <span className="text-green-600">+{newContractorsThisMonth}</span>
+                    ) : (
+                      <span className="text-muted-foreground">--</span>
+                    )} nhà thầu mới
                   </p>
                 </CardContent>
               </Card>
@@ -214,7 +243,13 @@ export default function Dashboard() {
                       : "--"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    <span className="text-green-600">+8.2%</span> tăng trưởng
+                    {valueChangePercent !== null ? (
+                      <span className={valueChangePercent >= 0 ? "text-green-600" : "text-red-600"}>
+                        {valueChangePercent >= 0 ? "+" : ""}{valueChangePercent}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">--</span>
+                    )} tăng trưởng
                   </p>
                 </CardContent>
               </Card>
@@ -231,7 +266,7 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {avgProgress !== null ? `${avgProgress}%` : "--"}
+                    {performance !== null ? `${performance}%` : "--"}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Tỷ lệ hoàn thành đúng hạn
@@ -266,6 +301,10 @@ export default function Dashboard() {
                                   ? "default"
                                   : contract.status === "active"
                                   ? "secondary"
+                                  : contract.status === "approved"
+                                  ? "default"
+                                  : contract.status === "rejected"
+                                  ? "destructive"
                                   : "outline"
                               }
                             >
@@ -273,6 +312,10 @@ export default function Dashboard() {
                                 ? "Hoàn thành"
                                 : contract.status === "active"
                                 ? "Đang thực hiện"
+                                : contract.status === "approved"
+                                ? "Đã phê duyệt"
+                                : contract.status === "rejected"
+                                ? "Đã từ chối"
                                 : "Chờ phê duyệt"}
                             </Badge>
                           </div>

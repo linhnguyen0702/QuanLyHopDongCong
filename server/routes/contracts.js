@@ -107,6 +107,11 @@ router.post("/:id/documents", handleUpload, async (req, res) => {
 
 // Apply authentication to all routes except test, update, and upload documents
 router.use((req, res, next) => {
+  // Allow all GET requests without token (read-only access)
+  if (req.method === 'GET') {
+    return next();
+  }
+
   // Skip authentication for upload documents
   if (req.path.match(/^\/\d+\/documents$/) && req.method === 'POST') {
     return next();
@@ -265,7 +270,7 @@ router.get("/", validatePagination, logActivity("VIEW"), async (req, res) => {
 })
 
 // Get contract by ID
-router.get("/:id", validateId, logActivity("VIEW"), async (req, res) => {
+router.get("/:id(\\d+)", validateId, logActivity("VIEW"), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -459,7 +464,7 @@ router.post("/", handleUpload, validateContractCreate, logActivity("CREATE"), as
 })
 
 // Update contract
-router.put("/:id", handleUpload, validateId, validateContractUpdate, logActivity("UPDATE"), async (req, res) => {
+router.put("/:id(\\d+)", handleUpload, validateId, validateContractUpdate, logActivity("UPDATE"), async (req, res) => {
   try {
     const { id } = req.params
     const { title, description, contractorId, value, startDate, endDate, status, progress, category, specifications, deliverables, paymentTerms } = req.body
@@ -624,7 +629,7 @@ router.put("/:id", handleUpload, validateId, validateContractUpdate, logActivity
 })
 
 // Delete contract
-router.delete("/:id", validateId, requireRole(["admin", "manager"]), logActivity("DELETE"), async (req, res) => {
+router.delete("/:id(\\d+)", validateId, requireRole(["admin", "manager"]), logActivity("DELETE"), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -655,9 +660,10 @@ router.delete("/:id", validateId, requireRole(["admin", "manager"]), logActivity
 })
 
 // Approve contract
-router.put("/:id/approve", validateId, requireRole(["admin", "manager"]), logActivity("APPROVE"), async (req, res) => {
+router.put("/:id/approve", validateId, requireRole(["admin", "manager", "approver"]), logActivity("APPROVE"), async (req, res) => {
   try {
     const { id } = req.params
+    const { comments } = req.body
 
     // Check if contract exists and is pending
     const [contracts] = await pool.execute("SELECT id, status FROM contracts WHERE id = ?", [id])
@@ -669,17 +675,36 @@ router.put("/:id/approve", validateId, requireRole(["admin", "manager"]), logAct
       })
     }
 
-    if (contracts[0].status !== "pending") {
+    if (contracts[0].status !== "pending_approval") {
       return res.status(400).json({
         success: false,
-        message: "Chỉ có thể phê duyệt hợp đồng đang chờ",
+        message: "Chỉ có thể phê duyệt hợp đồng đang chờ phê duyệt",
       })
     }
 
-    // Approve contract
+    // Create approval record (use minimal column set for broader schema compatibility)
+    try {
+      await pool.execute(
+        "INSERT INTO approvals (contract_id, approver_id, status, comments, created_at) VALUES (?, ?, 'approved', ?, NOW())",
+        [id, req.user.userId, comments || null]
+      )
+    } catch (e) {
+      // Fallback for schemas that require approval_level/approved_at
+      try {
+        await pool.execute(
+          "INSERT INTO approvals (contract_id, approver_id, approval_level, status, comments, created_at, approved_at) VALUES (?, ?, 1, 'approved', ?, NOW(), NOW())",
+          [id, req.user.userId, comments || null]
+        )
+      } catch (inner) {
+        console.error("Insert approval record failed:", inner?.message || inner)
+        throw inner
+      }
+    }
+
+    // Approve contract (avoid referencing optional columns like approved_by/approved_at)
     await pool.execute(
-      "UPDATE contracts SET status = ?, approved_by = ?, approved_at = NOW(), updated_at = NOW() WHERE id = ?",
-      ["active", req.user.userId, id],
+      "UPDATE contracts SET status = ?, updated_at = NOW() WHERE id = ?",
+      ["approved", id],
     )
 
     res.json({
@@ -695,12 +720,101 @@ router.put("/:id/approve", validateId, requireRole(["admin", "manager"]), logAct
   }
 })
 
+// Reject contract
+router.put("/:id/reject", validateId, requireRole(["admin", "manager", "approver"]), logActivity("REJECT"), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập lý do từ chối",
+      })
+    }
+
+    // Check if contract exists and is pending
+    const [contracts] = await pool.execute("SELECT id, status FROM contracts WHERE id = ?", [id])
+
+    if (contracts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy hợp đồng",
+      })
+    }
+
+    if (contracts[0].status !== "pending_approval") {
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ có thể từ chối hợp đồng đang chờ phê duyệt",
+      })
+    }
+
+    // Create rejection record (use minimal column set first)
+    try {
+      await pool.execute(
+        "INSERT INTO approvals (contract_id, approver_id, status, comments, created_at) VALUES (?, ?, 'rejected', ?, NOW())",
+        [id, req.user.userId, reason]
+      )
+    } catch (e) {
+      try {
+        await pool.execute(
+          "INSERT INTO approvals (contract_id, approver_id, approval_level, status, comments, created_at, approved_at) VALUES (?, ?, 1, 'rejected', ?, NOW(), NOW())",
+          [id, req.user.userId, reason]
+        )
+      } catch (inner) {
+        console.error("Insert rejection record failed:", inner?.message || inner)
+        throw inner
+      }
+    }
+
+    // Reject contract
+    await pool.execute(
+      "UPDATE contracts SET status = ?, updated_at = NOW() WHERE id = ?",
+      ["rejected", id],
+    )
+
+    res.json({
+      success: true,
+      message: "Từ chối hợp đồng thành công",
+    })
+  } catch (error) {
+    console.error("Reject contract error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Lỗi hệ thống nội bộ",
+    })
+  }
+})
+
 // Get contract statistics
 router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
   try {
     // Total contracts
     const [totalResult] = await pool.execute("SELECT COUNT(*) as total FROM contracts")
     const totalContracts = totalResult[0].total
+
+    // Contracts this month
+    const [thisMonthResult] = await pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM contracts 
+      WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+    `)
+    const thisMonthContracts = thisMonthResult[0].count
+
+    // Contracts last month
+    const [lastMonthResult] = await pool.execute(`
+      SELECT COUNT(*) as count 
+      FROM contracts 
+      WHERE YEAR(created_at) = YEAR(CURDATE() - INTERVAL 1 MONTH) 
+      AND MONTH(created_at) = MONTH(CURDATE() - INTERVAL 1 MONTH)
+    `)
+    const lastMonthContracts = lastMonthResult[0].count
+
+    // Calculate percentage change
+    const contractsChangePercent = lastMonthContracts > 0 
+      ? Math.round(((thisMonthContracts - lastMonthContracts) / lastMonthContracts) * 100 * 10) / 10
+      : thisMonthContracts > 0 ? 0 : 0  // If no data last month, show 0% change
 
     // Contracts by status
     const [statusResult] = await pool.execute(`
@@ -713,11 +827,45 @@ router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
     const [valueResult] = await pool.execute("SELECT SUM(value) as total_value FROM contracts")
     const totalValue = valueResult[0].total_value || 0
 
+    // Contract value this month
+    const [thisMonthValueResult] = await pool.execute(`
+      SELECT SUM(value) as total_value 
+      FROM contracts 
+      WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())
+    `)
+    const thisMonthValue = thisMonthValueResult[0].total_value || 0
+
+    // Contract value last month
+    const [lastMonthValueResult] = await pool.execute(`
+      SELECT SUM(value) as total_value 
+      FROM contracts 
+      WHERE YEAR(created_at) = YEAR(CURDATE() - INTERVAL 1 MONTH) 
+      AND MONTH(created_at) = MONTH(CURDATE() - INTERVAL 1 MONTH)
+    `)
+    const lastMonthValue = lastMonthValueResult[0].total_value || 0
+
+    // Calculate value percentage change
+    const valueChangePercent = lastMonthValue > 0 
+      ? Math.round(((thisMonthValue - lastMonthValue) / lastMonthValue) * 100 * 10) / 10
+      : thisMonthValue > 0 ? 0 : 0  // If no data last month, show 0% change
+
     // Average completion rate
     const [progressResult] = await pool.execute(
       'SELECT AVG(progress) as avg_progress FROM contracts WHERE status = "active"',
     )
     const avgProgress = progressResult[0].avg_progress || 0
+
+    // Calculate performance (contracts completed on time)
+    const [performanceResult] = await pool.execute(`
+      SELECT 
+        COUNT(*) as total_completed,
+        COUNT(CASE WHEN updated_at <= end_date THEN 1 END) as completed_on_time
+      FROM contracts 
+      WHERE status = 'completed'
+    `)
+    const performance = performanceResult[0].total_completed > 0 
+      ? Math.round((performanceResult[0].completed_on_time / performanceResult[0].total_completed) * 100 * 10) / 10
+      : 0
 
     // Contracts expiring soon (within 30 days)
     const [expiringResult] = await pool.execute(`
@@ -737,9 +885,16 @@ router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
       success: true,
       data: {
         totalContracts,
+        contractsChangePercent,
+        thisMonthContracts,
+        lastMonthContracts,
         statusBreakdown: statusResult,
         totalValue,
+        valueChangePercent,
+        thisMonthValue,
+        lastMonthValue,
         avgProgress: Math.round(avgProgress * 10) / 10,
+        performance,
         expiringCount: expiringResult[0].expiring_count,
         overdueCount: overdueResult[0].overdue_count,
       },
@@ -752,6 +907,129 @@ router.get("/stats/overview", logActivity("VIEW"), async (req, res) => {
     })
   }
 })
+
+// Get contracts for approval page
+router.get("/approvals", async (req, res) => {
+  try {
+    const { status = 'pending_approval' } = req.query;
+    
+    console.log('[Approvals] Fetching contracts with status:', status);
+    
+    let query = `
+      SELECT 
+        c.id,
+        c.contract_number,
+        c.title,
+        c.description,
+        c.value,
+        c.status,
+        c.created_at as submitted_date,
+        c.category,
+        c.contractor_id,
+        co.name as contractor_name,
+        co.contact_person,
+        co.email as contractor_email,
+        creator.full_name as created_by_name,
+        creator.email as created_by_email
+      FROM contracts c
+      LEFT JOIN contractors co ON c.contractor_id = co.id
+      LEFT JOIN users creator ON c.created_by = creator.id
+      WHERE c.status = ?
+      ORDER BY c.created_at DESC
+    `;
+    
+    console.log('[Approvals] Executing query:', query);
+    console.log('[Approvals] With status parameter:', status);
+    
+    const [contracts] = await pool.execute(query, [status]);
+    console.log('[Approvals] Found contracts:', contracts.length);
+    console.log('[Approvals] First contract sample:', contracts[0]);
+    
+    // Get approval workflow for each contract
+    const contractsWithApprovals = await Promise.all(
+      contracts.map(async (contract) => {
+        // Get approval history for this contract
+        const [approvals] = await pool.execute(`
+          SELECT 
+            a.*,
+            u.full_name as approver_name,
+            u.role as approver_role,
+            u.email as approver_email
+          FROM approvals a
+          LEFT JOIN users u ON a.approver_id = u.id
+          WHERE a.contract_id = ?
+          ORDER BY a.approval_level ASC, a.created_at ASC
+        `, [contract.id]);
+        
+        // Get contract documents
+        const [documents] = await pool.execute(`
+          SELECT 
+            cd.document_name,
+            cd.file_path,
+            cd.document_type,
+            cd.created_at
+          FROM contract_documents cd
+          WHERE cd.contract_id = ?
+          ORDER BY cd.created_at DESC
+        `, [contract.id]);
+        
+        // Parse attachments
+        let attachments = [];
+        if (contract.attachments) {
+          try {
+            attachments = JSON.parse(contract.attachments);
+          } catch (e) {
+            console.error('Error parsing attachments:', e);
+            attachments = [];
+          }
+        }
+        
+        // Calculate approval progress
+        const totalApprovals = approvals.length;
+        const approvedCount = approvals.filter(a => a.status === 'approved').length;
+        const rejectedCount = approvals.filter(a => a.status === 'rejected').length;
+        const pendingCount = approvals.filter(a => a.status === 'pending').length;
+        
+        let currentStep = approvedCount;
+        let approvalStatus = 'pending';
+        
+        if (rejectedCount > 0) {
+          approvalStatus = 'rejected';
+        } else if (approvedCount === totalApprovals && totalApprovals > 0) {
+          approvalStatus = 'approved';
+        }
+        
+        return {
+          ...contract,
+          currentStep,
+          totalSteps: totalApprovals || 1,
+          approvalStatus,
+          approvers: approvals.map(approval => ({
+            name: approval.approver_name || 'Chưa xác định',
+            role: approval.approver_role || 'Chưa xác định',
+            status: approval.status,
+            date: approval.approved_at ? new Date(approval.approved_at).toISOString().split('T')[0] : null,
+            comments: approval.comments
+          })),
+          documents: documents.map(doc => doc.document_name),
+          attachments: attachments.map(att => att.name || att.filename)
+        };
+      })
+    );
+    
+    res.json({
+      success: true,
+      data: contractsWithApprovals
+    });
+  } catch (error) {
+    console.error("Get contracts for approval error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi hệ thống nội bộ",
+      error: error.message
+    });
+  }
+});
 
 // Download contract attachment
 router.get("/download-attachment/:id/:filename", async (req, res) => {

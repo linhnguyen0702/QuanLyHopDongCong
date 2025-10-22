@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { AuthGuard } from "@/components/auth-guard";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { cn } from "@/lib/utils";
+import { contractsApi } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -43,155 +45,111 @@ import {
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 
+interface Contract {
+  id: number;
+  contract_number: string;
+  title: string;
+  description: string;
+  value: number;
+  status: string;
+  submitted_date: string;
+  category: string;
+  priority: string;
+  contractor_name: string;
+  contact_person: string;
+  contractor_email: string;
+  created_by_name: string;
+  created_by_email: string;
+  currentStep: number;
+  totalSteps: number;
+  approvalStatus: string;
+  approvers: Array<{
+    name: string;
+    role: string;
+    status: string;
+    date: string | null;
+    comments: string | null;
+  }>;
+  documents: string[];
+  attachments: string[];
+}
+
 export default function ApprovalsPage() {
   const { collapsed } = useSidebar();
   const [selectedTab, setSelectedTab] = useState("pending");
-  const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<Contract[]>([]);
+  const [approvedContracts, setApprovedContracts] = useState<Contract[]>([]);
+  const [rejectedContracts, setRejectedContracts] = useState<Contract[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Sample data for pending approvals
-  const pendingApprovals = [
-    {
-      id: "HĐ-2024-001",
-      title: "Xây dựng cầu Nhật Tân 2",
-      contractor: "Công ty TNHH ABC",
-      value: "450M VNĐ",
-      submittedDate: new Date("2024-01-15"),
-      priority: "high",
-      currentStep: 2,
-      totalSteps: 4,
-      approvers: [
-        {
-          name: "Nguyễn Văn A",
-          role: "Trưởng phòng",
-          status: "approved",
-          date: "2024-01-16",
-        },
-        {
-          name: "Trần Thị B",
-          role: "Phó giám đốc",
-          status: "pending",
-          date: null,
-        },
-        { name: "Lê Văn C", role: "Giám đốc", status: "waiting", date: null },
-        { name: "Phạm Thị D", role: "Hội đồng", status: "waiting", date: null },
-      ],
-      documents: [
-        "Hồ sơ đấu thầu.pdf",
-        "Báo giá chi tiết.xlsx",
-        "Chứng chỉ năng lực.pdf",
-      ],
-      description:
-        "Dự án xây dựng cầu Nhật Tân 2 với tổng chiều dài 1.2km, kết nối hai bờ sông Hồng.",
-    },
-    {
-      id: "HĐ-2024-002",
-      title: "Nâng cấp hệ thống điện",
-      contractor: "Tập đoàn Điện lực XYZ",
-      value: "280M VNĐ",
-      submittedDate: new Date("2024-01-18"),
-      priority: "medium",
-      currentStep: 1,
-      totalSteps: 3,
-      approvers: [
-        {
-          name: "Hoàng Văn E",
-          role: "Trưởng phòng",
-          status: "pending",
-          date: null,
-        },
-        {
-          name: "Ngô Thị F",
-          role: "Phó giám đốc",
-          status: "waiting",
-          date: null,
-        },
-        { name: "Vũ Văn G", role: "Giám đốc", status: "waiting", date: null },
-      ],
-      documents: ["Thiết kế kỹ thuật.pdf", "Dự toán chi phí.xlsx"],
-      description:
-        "Nâng cấp hệ thống điện cho khu công nghiệp, công suất 50MW.",
-    },
-    {
-      id: "HĐ-2024-003",
-      title: "Xây dựng trường học",
-      contractor: "Công ty Xây dựng DEF",
-      value: "320M VNĐ",
-      submittedDate: new Date("2024-01-20"),
-      priority: "urgent",
-      currentStep: 3,
-      totalSteps: 4,
-      approvers: [
-        {
-          name: "Đỗ Văn H",
-          role: "Trưởng phòng",
-          status: "approved",
-          date: "2024-01-21",
-        },
-        {
-          name: "Bùi Thị I",
-          role: "Phó giám đốc",
-          status: "approved",
-          date: "2024-01-22",
-        },
-        { name: "Lý Văn J", role: "Giám đốc", status: "pending", date: null },
-        {
-          name: "Hội đồng QT",
-          role: "Hội đồng",
-          status: "waiting",
-          date: null,
-        },
-      ],
-      documents: [
-        "Bản vẽ thiết kế.pdf",
-        "Thuyết minh dự án.docx",
-        "Phân tích tài chính.xlsx",
-      ],
-      description:
-        "Xây dựng trường tiểu học 24 phòng học, phục vụ 960 học sinh.",
-    },
-  ];
+  // Load data from API
+  useEffect(() => {
+    loadApprovalData();
+  }, []);
 
-  const approvedContracts = [
-    {
-      id: "HĐ-2023-045",
-      title: "Sửa chữa đường Láng",
-      contractor: "Công ty Giao thông ABC",
-      value: "180M VNĐ",
-      approvedDate: new Date("2024-01-10"),
-      finalApprover: "Lê Văn C",
-      blockchainHash: "0x1a2b3c4d5e6f7890abcdef1234567890",
-    },
-    {
-      id: "HĐ-2023-046",
-      title: "Cung cấp thiết bị y tế",
-      contractor: "Công ty Y tế XYZ",
-      value: "95M VNĐ",
-      approvedDate: new Date("2024-01-12"),
-      finalApprover: "Phạm Thị D",
-      blockchainHash: "0x9876543210fedcba0987654321abcdef",
-    },
-  ];
+  const loadApprovalData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const rejectedContracts = [
-    {
-      id: "HĐ-2024-004",
-      title: "Mua sắm máy tính",
-      contractor: "Công ty Công nghệ GHI",
-      value: "45M VNĐ",
-      rejectedDate: new Date("2024-01-14"),
-      rejectedBy: "Trần Thị B",
-      reason: "Giá cả không cạnh tranh, cần đàm phán lại",
-    },
-  ];
+      // Load pending approvals
+      const pendingResponse = await contractsApi.getForApproval('pending_approval');
+      if (pendingResponse.success && pendingResponse.data) {
+        setPendingApprovals(pendingResponse.data as Contract[]);
+      }
 
-  const handleApprove = (contractId: string, comment: string) => {
-    console.log(`Approved contract ${contractId} with comment: ${comment}`);
-    // Handle approval logic
+      // Load approved contracts
+      const approvedResponse = await contractsApi.getForApproval('approved');
+      if (approvedResponse.success && approvedResponse.data) {
+        setApprovedContracts(approvedResponse.data as Contract[]);
+      }
+
+      // Load rejected contracts
+      const rejectedResponse = await contractsApi.getForApproval('rejected');
+      if (rejectedResponse.success && rejectedResponse.data) {
+        setRejectedContracts(rejectedResponse.data as Contract[]);
+      }
+    } catch (err) {
+      console.error('Error loading approval data:', err);
+      setError('Không thể tải dữ liệu phê duyệt');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = (contractId: string, reason: string) => {
-    console.log(`Rejected contract ${contractId} with reason: ${reason}`);
-    // Handle rejection logic
+
+  const handleApprove = async (contractId: number, comment: string) => {
+    try {
+      const response = await contractsApi.approve(contractId, comment);
+      if (response.success) {
+        // Reload data after approval
+        await loadApprovalData();
+        alert('Phê duyệt hợp đồng thành công!');
+      } else {
+        alert('Lỗi khi phê duyệt hợp đồng: ' + response.message);
+      }
+    } catch (error) {
+      console.error('Error approving contract:', error);
+      alert('Lỗi khi phê duyệt hợp đồng');
+    }
+  };
+
+  const handleReject = async (contractId: number, reason: string) => {
+    try {
+      const response = await contractsApi.reject(contractId, reason);
+      if (response.success) {
+        // Reload data after rejection
+        await loadApprovalData();
+        alert('Từ chối hợp đồng thành công!');
+      } else {
+        alert('Lỗi khi từ chối hợp đồng: ' + response.message);
+      }
+    } catch (error) {
+      console.error('Error rejecting contract:', error);
+      alert('Lỗi khi từ chối hợp đồng');
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -220,12 +178,56 @@ export default function ApprovalsPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <AuthGuard>
+        <div className="layout-container bg-background">
+          <Sidebar />
+          <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+            <Header />
+            <main className="flex-1 p-6">
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Đang tải dữ liệu...</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </AuthGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <AuthGuard>
+        <div className="layout-container bg-background">
+          <Sidebar />
+          <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+            <Header />
+            <main className="flex-1 p-6">
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                  <p className="text-destructive mb-4">{error}</p>
+                  <Button onClick={loadApprovalData}>Thử lại</Button>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   return (
-    <div className="layout-container bg-background">
-      <Sidebar />
-      <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
-        <Header />
-        <main className="flex-1 p-6">
+    <AuthGuard>
+      <div className="layout-container bg-background">
+        <Sidebar />
+        <div className={cn("main-content", collapsed && "sidebar-collapsed")}>
+          <Header />
+          <main className="flex-1 p-6">
           {/* Page Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -276,7 +278,13 @@ export default function ApprovalsPage() {
             {/* Pending Approvals */}
             <TabsContent value="pending" className="space-y-6">
               <div className="grid gap-6">
-                {pendingApprovals.map((contract) => (
+                {pendingApprovals.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">Không có hợp đồng nào chờ phê duyệt</p>
+                  </div>
+                ) : (
+                  pendingApprovals.map((contract) => (
                   <Card
                     key={contract.id}
                     className="hover:shadow-md transition-shadow"
@@ -289,28 +297,28 @@ export default function ApprovalsPage() {
                               {contract.title}
                             </CardTitle>
                             <Badge
-                              variant={getPriorityColor(contract.priority)}
+                              variant={getPriorityColor(contract.priority || 'medium')}
                             >
-                              {getPriorityText(contract.priority)}
+                              {getPriorityText(contract.priority || 'medium')}
                             </Badge>
                           </div>
                           <CardDescription className="flex items-center space-x-4">
                             <span className="flex items-center space-x-1">
                               <FileText className="h-4 w-4" />
-                              <span>{contract.id}</span>
+                              <span>{contract.contract_number}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <Building2 className="h-4 w-4" />
-                              <span>{contract.contractor}</span>
+                              <span>{contract.contractor_name}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <DollarSign className="h-4 w-4" />
-                              <span>{contract.value}</span>
+                              <span>{contract.value?.toLocaleString('vi-VN')} VNĐ</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <Calendar className="h-4 w-4" />
                               <span>
-                                {format(contract.submittedDate, "dd/MM/yyyy", {
+                                {format(new Date(contract.submitted_date), "dd/MM/yyyy", {
                                   locale: vi,
                                 })}
                               </span>
@@ -344,7 +352,7 @@ export default function ApprovalsPage() {
                                       Mã hợp đồng
                                     </Label>
                                     <p className="text-sm text-muted-foreground">
-                                      {selectedContract.id}
+                                      {selectedContract.contract_number}
                                     </p>
                                   </div>
                                   <div>
@@ -352,7 +360,7 @@ export default function ApprovalsPage() {
                                       Nhà thầu
                                     </Label>
                                     <p className="text-sm text-muted-foreground">
-                                      {selectedContract.contractor}
+                                      {selectedContract.contractor_name}
                                     </p>
                                   </div>
                                   <div>
@@ -360,7 +368,7 @@ export default function ApprovalsPage() {
                                       Giá trị
                                     </Label>
                                     <p className="text-sm text-muted-foreground">
-                                      {selectedContract.value}
+                                      {selectedContract.value?.toLocaleString('vi-VN')} VNĐ
                                     </p>
                                   </div>
                                   <div>
@@ -369,12 +377,12 @@ export default function ApprovalsPage() {
                                     </Label>
                                     <Badge
                                       variant={getPriorityColor(
-                                        selectedContract.priority
+                                        selectedContract.priority || 'medium'
                                       )}
                                       className="mt-1"
                                     >
                                       {getPriorityText(
-                                        selectedContract.priority
+                                        selectedContract.priority || 'medium'
                                       )}
                                     </Badge>
                                   </div>
@@ -406,7 +414,7 @@ export default function ApprovalsPage() {
                                   />
                                   <div className="space-y-3">
                                     {selectedContract.approvers.map(
-                                      (approver: any, index: number) => (
+                                      (approver, index: number) => (
                                         <div
                                           key={index}
                                           className="flex items-center justify-between p-3 border rounded-lg"
@@ -470,7 +478,7 @@ export default function ApprovalsPage() {
                                   </Label>
                                   <div className="space-y-2">
                                     {selectedContract.documents.map(
-                                      (doc: string, index: number) => (
+                                      (doc, index: number) => (
                                         <div
                                           key={index}
                                           className="flex items-center justify-between p-2 bg-muted rounded"
@@ -512,12 +520,14 @@ export default function ApprovalsPage() {
                                           <Button variant="outline">Hủy</Button>
                                           <Button
                                             variant="destructive"
-                                            onClick={() =>
-                                              handleReject(
-                                                selectedContract.id,
-                                                "Lý do từ chối"
-                                              )
-                                            }
+                                            onClick={() => {
+                                              const reason = (document.querySelector('textarea[placeholder="Nhập lý do từ chối..."]') as HTMLTextAreaElement)?.value;
+                                              if (reason) {
+                                                handleReject(selectedContract.id, reason);
+                                              } else {
+                                                alert('Vui lòng nhập lý do từ chối');
+                                              }
+                                            }}
                                           >
                                             Xác nhận từ chối
                                           </Button>
@@ -550,12 +560,10 @@ export default function ApprovalsPage() {
                                         <div className="flex justify-end space-x-2">
                                           <Button variant="outline">Hủy</Button>
                                           <Button
-                                            onClick={() =>
-                                              handleApprove(
-                                                selectedContract.id,
-                                                "Nhận xét phê duyệt"
-                                              )
-                                            }
+                                            onClick={() => {
+                                              const comment = (document.querySelector('textarea[placeholder="Nhập nhận xét (tùy chọn)..."]') as HTMLTextAreaElement)?.value;
+                                              handleApprove(selectedContract.id, comment || '');
+                                            }}
                                           >
                                             Xác nhận phê duyệt
                                           </Button>
@@ -607,15 +615,15 @@ export default function ApprovalsPage() {
                             <span className="text-sm font-medium">
                               {
                                 contract.approvers.find(
-                                  (a: any) => a.status === "pending"
-                                )?.name
+                                  (a) => a.status === "pending"
+                                )?.name || "Chưa xác định"
                               }
                             </span>
                             <Badge variant="outline" className="text-xs">
                               {
                                 contract.approvers.find(
-                                  (a: any) => a.status === "pending"
-                                )?.role
+                                  (a) => a.status === "pending"
+                                )?.role || "Chưa xác định"
                               }
                             </Badge>
                           </div>
@@ -629,14 +637,21 @@ export default function ApprovalsPage() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
 
             {/* Approved Contracts */}
             <TabsContent value="approved" className="space-y-6">
               <div className="grid gap-6">
-                {approvedContracts.map((contract) => (
+                {approvedContracts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">Không có hợp đồng nào đã phê duyệt</p>
+                  </div>
+                ) : (
+                  approvedContracts.map((contract) => (
                   <Card key={contract.id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -656,15 +671,15 @@ export default function ApprovalsPage() {
                           <CardDescription className="flex items-center space-x-4">
                             <span className="flex items-center space-x-1">
                               <FileText className="h-4 w-4" />
-                              <span>{contract.id}</span>
+                              <span>{contract.contract_number}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <Building2 className="h-4 w-4" />
-                              <span>{contract.contractor}</span>
+                              <span>{contract.contractor_name}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <DollarSign className="h-4 w-4" />
-                              <span>{contract.value}</span>
+                              <span>{contract.value?.toLocaleString('vi-VN')} VNĐ</span>
                             </span>
                           </CardDescription>
                         </div>
@@ -677,44 +692,46 @@ export default function ApprovalsPage() {
                             Ngày phê duyệt:
                           </span>
                           <span className="text-sm font-medium">
-                            {format(contract.approvedDate, "dd/MM/yyyy", {
+                            {format(new Date(contract.submitted_date), "dd/MM/yyyy", {
                               locale: vi,
                             })}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">
-                            Người phê duyệt cuối:
+                            Người tạo:
                           </span>
                           <span className="text-sm font-medium">
-                            {contract.finalApprover}
+                            {contract.created_by_name}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">
-                            Blockchain Hash:
+                            Trạng thái:
                           </span>
-                          <div className="flex items-center space-x-2">
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {contract.blockchainHash.substring(0, 20)}...
-                            </code>
-                            <Badge variant="outline" className="text-xs">
+                          <Badge variant="default" className="text-xs">
                               <Shield className="h-3 w-3 mr-1" />
-                              Đã xác thực
+                            Đã phê duyệt
                             </Badge>
-                          </div>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
 
             {/* Rejected Contracts */}
             <TabsContent value="rejected" className="space-y-6">
               <div className="grid gap-6">
-                {rejectedContracts.map((contract) => (
+                {rejectedContracts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <XCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">Không có hợp đồng nào đã từ chối</p>
+                  </div>
+                ) : (
+                  rejectedContracts.map((contract) => (
                   <Card key={contract.id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -731,15 +748,15 @@ export default function ApprovalsPage() {
                           <CardDescription className="flex items-center space-x-4">
                             <span className="flex items-center space-x-1">
                               <FileText className="h-4 w-4" />
-                              <span>{contract.id}</span>
+                              <span>{contract.contract_number}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <Building2 className="h-4 w-4" />
-                              <span>{contract.contractor}</span>
+                              <span>{contract.contractor_name}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <DollarSign className="h-4 w-4" />
-                              <span>{contract.value}</span>
+                              <span>{contract.value?.toLocaleString('vi-VN')} VNĐ</span>
                             </span>
                           </CardDescription>
                         </div>
@@ -752,17 +769,17 @@ export default function ApprovalsPage() {
                             Ngày từ chối:
                           </span>
                           <span className="text-sm font-medium">
-                            {format(contract.rejectedDate, "dd/MM/yyyy", {
+                            {format(new Date(contract.submitted_date), "dd/MM/yyyy", {
                               locale: vi,
                             })}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">
-                            Người từ chối:
+                            Người tạo:
                           </span>
                           <span className="text-sm font-medium">
-                            {contract.rejectedBy}
+                            {contract.created_by_name}
                           </span>
                         </div>
                         <div className="space-y-2">
@@ -771,19 +788,21 @@ export default function ApprovalsPage() {
                           </span>
                           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                             <p className="text-sm text-red-800">
-                              {contract.reason}
+                              {contract.approvers.find(a => a.status === 'rejected')?.comments || 'Không có lý do cụ thể'}
                             </p>
                           </div>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
           </Tabs>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </AuthGuard>
   );
 }
