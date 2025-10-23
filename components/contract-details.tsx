@@ -29,9 +29,10 @@ import {
 interface ContractDetailsProps {
   contract: any
   onClose: () => void
+  isFullPage?: boolean
 }
 
-export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
+export function ContractDetails({ contract, onClose, isFullPage = false }: ContractDetailsProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [contractDetails, setContractDetails] = useState<any>(null);
@@ -284,7 +285,7 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Xử lý xuất PDF hợp đồng
+  // Xử lý xuất PDF hợp đồng (sử dụng cửa sổ in để lưu thành PDF)
   const handleExportPDF = () => {
     try {
       const contractData = {
@@ -300,22 +301,6 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
       };
 
       const htmlContent = `
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Hợp đồng ${contractData.contractNumber}</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 40px; }
-              .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-              .contract-info { margin-bottom: 20px; }
-              .info-row { margin-bottom: 10px; display: flex; }
-              .label { font-weight: bold; display: inline-block; width: 200px; }
-              .value { flex: 1; }
-              .section { margin-bottom: 30px; }
-              .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
-            </style>
-          </head>
-          <body>
             <div class="header">
               <h1>HỢP ĐỒNG DỰ ÁN</h1>
               <h2>${contractData.title}</h2>
@@ -366,23 +351,51 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
                 <span class="value">${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}</span>
               </div>
             </div>
-          </body>
-        </html>
       `;
 
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `hop-dong-${contractData.contractNumber}.html`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // Mở cửa sổ in để người dùng chọn "Save as PDF"
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) throw new Error('Không thể mở cửa sổ in');
+
+      // Ghi nội dung và chèn CSS in ấn
+      printWindow.document.open();
+      printWindow.document.write(`
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Hợp đồng ${contractData.contractNumber}</title>
+            <style>
+              @page { margin: 20mm; }
+              body { font-family: Arial, sans-serif; margin: 40px; }
+              .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+              .contract-info { margin-bottom: 20px; }
+              .info-row { margin-bottom: 10px; display: flex; }
+              .label { font-weight: bold; display: inline-block; width: 200px; }
+              .value { flex: 1; }
+              .section { margin-bottom: 30px; }
+              .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+              @media print {
+                .no-print { display: none !important; }
+              }
+            </style>
+          </head>
+          <body>
+            ${htmlContent}
+            <div class="no-print" style="text-align:center;margin-top:24px;">
+              <button onclick="window.print()" style="padding:8px 12px;">In / Lưu PDF</button>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      // Gọi print sau một nhịp để đảm bảo nội dung được render
+      setTimeout(() => {
+        try { printWindow.focus(); printWindow.print(); } catch {}
+      }, 300);
 
       toast({
         title: "Thành công",
-        description: "Đã xuất hợp đồng thành công",
+        description: "Đã mở hộp thoại in. Chọn 'Save as PDF' để lưu",
       });
     } catch (error) {
       console.error("Export PDF error:", error);
@@ -893,7 +906,9 @@ export function ContractDetails({ contract, onClose }: ContractDetailsProps) {
           <Edit className="h-4 w-4 mr-2" />
           Chỉnh sửa hợp đồng
         </Button>
-        <Button onClick={onClose}>Đóng</Button>
+        {!isFullPage && (
+          <Button onClick={onClose}>Đóng</Button>
+        )}
       </div>
     </div>
   )

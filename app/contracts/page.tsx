@@ -50,6 +50,7 @@ import {
   Download,
   Shield,
 } from "lucide-react";
+import { BlockchainStatusBadge } from "@/components/blockchain-status-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -579,19 +580,18 @@ export default function ContractsPage() {
                       </TableCell>
                       <TableCell>{getStatusBadge(contract.status)}</TableCell>
                       <TableCell>
-                        {/* Không có hash từ API hiện tại */}
-                        {false ? (
-                          <div className="flex items-center space-x-1">
-                            <Shield className="h-4 w-4 text-green-600" />
-                            <span className="text-xs text-green-600">
-                              Đã xác thực
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Chưa lưu
-                          </span>
-                        )}
+                        <BlockchainStatusBadge 
+                          contractId={contract.contract_number}
+                          contractData={contract}
+                          onStatusChange={(isOnBlockchain) => {
+                            // Update contract status in local state
+                            setItems((prev: any[]) => prev.map((c: any) => 
+                              c.id === contract.id 
+                                ? { ...c, is_blockchain_verified: isOnBlockchain }
+                                : c
+                            ))
+                          }}
+                        />
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

@@ -61,6 +61,12 @@ const getNavigation = (texts: Record<string, string>) => [
     icon: History,
   },
   {
+    name: "Blockchain",
+    nameEn: "Blockchain",
+    href: "/blockchain",
+    icon: Shield,
+  },
+  {
     name: texts.users || "Người dùng",
     nameEn: "Users",
     href: "/users",

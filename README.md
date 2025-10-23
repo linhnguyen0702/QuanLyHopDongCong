@@ -1,6 +1,6 @@
-# Hệ Thống Quản Lý Hợp Đồng
+# Hệ Thống Quản Lý Hợp Đồng với Hyperledger Fabric
 
-Hệ thống quản lý hợp đồng được xây dựng với Next.js (Frontend) và Node.js + Express (Backend).
+Hệ thống quản lý hợp đồng được xây dựng với Next.js (Frontend), Node.js + Express (Backend) và tích hợp Hyperledger Fabric blockchain để đảm bảo tính minh bạch và bất biến của dữ liệu.
 
 ## Tính Năng Chính
 
@@ -30,6 +30,10 @@ Hệ thống quản lý hợp đồng được xây dựng với Next.js (Fronte
 - 📤 File upload (Multer)
 - 📊 Reporting endpoints
 - ✅ Approval workflow system
+- ⛓️ **Hyperledger Fabric Blockchain Integration**
+- 🔐 **Smart Contract Management**
+- 📋 **Immutable Contract Storage**
+- 🔍 **Blockchain Audit Trail**
 
 ## Cấu Trúc Database
 
@@ -141,12 +145,26 @@ Hệ thống quản lý hợp đồng được xây dựng với Next.js (Fronte
 - `GET /api/audit/stats/summary` - Thống kê kiểm toán
 - `GET /api/audit/user/:userId` - Nhật ký theo người dùng
 
+### Blockchain (Mới)
+
+- `GET /api/blockchain/status` - Trạng thái mạng blockchain
+- `GET /api/blockchain/test` - Kiểm tra kết nối blockchain
+- `POST /api/blockchain/contracts` - Tạo hợp đồng trên blockchain
+- `GET /api/blockchain/contracts/:id` - Lấy hợp đồng từ blockchain
+- `GET /api/blockchain/contracts` - Lấy tất cả hợp đồng từ blockchain
+- `PUT /api/blockchain/contracts/:id` - Cập nhật hợp đồng trên blockchain
+- `POST /api/blockchain/audit-logs` - Tạo audit log trên blockchain
+- `GET /api/blockchain/audit-logs` - Lấy audit logs từ blockchain
+- `GET /api/blockchain/generate-contract-id` - Tạo ID hợp đồng mới
+
 ## Cài Đặt và Chạy
 
 ### Yêu cầu hệ thống:
 
 - Node.js >= 18
 - MySQL >= 8.0
+- Docker và Docker Compose
+- Hyperledger Fabric 2.4.0
 - npm hoặc yarn
 
 ### Cài đặt:
@@ -193,24 +211,32 @@ mysql -u root -p < scripts/03_create_indexes.sql
 mysql -u root -p < scripts/03_create_views.sql
 \`\`\`
 
-6. Chạy ứng dụng:
+6. **Cài đặt và khởi động Hyperledger Fabric:**
    \`\`\`bash
+   # Chạy script tự động (Linux/Mac)
+   ./setup-hyperledger.sh
+   
+   # Hoặc trên Windows
+   manage-system.bat start
+   \`\`\`
 
-# Chạy cả frontend và backend
-
-npm run dev:full
-
-# Hoặc chạy riêng biệt:
-
-npm run server:dev # Backend (port 5000)
-npm run dev # Frontend (port 3000)
-\`\`\`
+7. **Chạy ứng dụng:**
+   \`\`\`bash
+   # Chạy cả frontend và backend
+   npm run dev:full
+   
+   # Hoặc chạy riêng biệt:
+   npm run server:dev # Backend (port 5000)
+   npm run dev # Frontend (port 3000)
+   \`\`\`
 
 ## Truy cập ứng dụng:
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:5000
 - Health check: http://localhost:5000/api/health
+- **Blockchain API: http://localhost:5000/api/blockchain**
+- **Blockchain Status: http://localhost:5000/api/blockchain/status**
 
 ## Tài khoản mặc định:
 
@@ -288,6 +314,9 @@ npm run dev # Frontend (port 3000)
 - Helmet
 - CORS
 - Express Rate Limit
+- **Fabric Network SDK**
+- **Fabric CA Client**
+- **Winston Logger**
 
 ## Bảo mật:
 
@@ -301,6 +330,10 @@ npm run dev # Frontend (port 3000)
 - Role-based access control
 - Audit logging cho tất cả actions
 - IP tracking và User-Agent logging
+- **Blockchain Immutability**
+- **Cryptographic Data Integrity**
+- **Distributed Ledger Security**
+- **Smart Contract Validation**
 
 ## Tính năng nâng cao:
 
@@ -316,6 +349,12 @@ npm run dev # Frontend (port 3000)
 - Payment status monitoring
 - Document version control
 - Email notifications (cần cấu hình SMTP)
+- **Blockchain Contract Storage**
+- **Immutable Audit Trail**
+- **Smart Contract Automation**
+- **Distributed Data Verification**
+- **Blockchain Transaction History**
+- **Cryptographic Proof of Integrity**
 
 ## Database Views và Stored Procedures:
 
@@ -333,6 +372,62 @@ npm run dev # Frontend (port 3000)
 - Performance metrics
 - Audit trail cho security compliance
 
+## Hyperledger Fabric Integration:
+
+### Quản lý hệ thống:
+
+\`\`\`bash
+# Linux/Mac
+./manage-system.sh start    # Khởi động hệ thống
+./manage-system.sh stop     # Dừng hệ thống
+./manage-system.sh restart  # Khởi động lại
+./manage-system.sh status   # Kiểm tra trạng thái
+./manage-system.sh test     # Test blockchain
+
+# Windows
+manage-system.bat start    # Khởi động hệ thống
+manage-system.bat stop     # Dừng hệ thống
+manage-system.bat restart  # Khởi động lại
+manage-system.bat status   # Kiểm tra trạng thái
+manage-system.bat test     # Test blockchain
+\`\`\`
+
+### Sử dụng Blockchain API:
+
+\`\`\`javascript
+// Kiểm tra trạng thái blockchain
+const response = await fetch('http://localhost:5000/api/blockchain/status');
+const status = await response.json();
+
+// Tạo hợp đồng trên blockchain
+const contractData = {
+  id: 'HĐ-2024-001',
+  title: 'Xây dựng cầu Nhật Tân 2',
+  contractor: 'Công ty TNHH ABC Construction',
+  value: 450000000,
+  startDate: '2024-01-15',
+  endDate: '2024-12-31',
+  status: 'active',
+  createdBy: 'admin',
+  createdAt: new Date().toISOString()
+};
+
+const createResponse = await fetch('http://localhost:5000/api/blockchain/contracts', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(contractData)
+});
+\`\`\`
+
+### Cấu trúc Smart Contract:
+
+- **CreateContract**: Tạo hợp đồng mới
+- **UpdateContract**: Cập nhật hợp đồng
+- **GetContract**: Lấy thông tin hợp đồng
+- **GetAllContracts**: Lấy tất cả hợp đồng
+- **CreateAuditLog**: Tạo audit log
+- **GetAuditLogs**: Lấy audit logs
+
 ## Deployment:
 
 - Hỗ trợ Docker containerization
@@ -340,6 +435,8 @@ npm run dev # Frontend (port 3000)
 - Production-ready security headers
 - Database migration scripts
 - Backup và restore procedures
+- **Hyperledger Fabric Network Deployment**
+- **Blockchain Infrastructure Management**
 
 ## API Response Format:
 

@@ -27,6 +27,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Plus,
+  ExternalLink,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { contractsApi, contractorsApi } from "@/lib/api";
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { ContractForm } from "@/components/contract-form";
 import { ContractorForm } from "@/components/contractor-form";
+import { ContractDetails } from "@/components/contract-details";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -46,6 +48,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [isContractorDialogOpen, setIsContractorDialogOpen] = useState(false);
+  const [isContractDetailsDialogOpen, setIsContractDetailsDialogOpen] = useState(false);
+  const [selectedContract, setSelectedContract] = useState<any>(null);
 
   // Real data states
   const [totalContracts, setTotalContracts] = useState<number | null>(null);
@@ -75,8 +79,9 @@ export default function Dashboard() {
     router.push("/approvals");
   };
 
-  const handleViewContract = (contractId: string) => {
-    router.push(`/contracts/${contractId}`);
+  const handleViewContract = (contract: any) => {
+    setSelectedContract(contract);
+    setIsContractDetailsDialogOpen(true);
   };
 
   // Fetch dashboard data
@@ -289,8 +294,9 @@ export default function Dashboard() {
                     {recentContracts.map((contract: any) => (
                       <div
                         key={contract.id}
-                        className="flex items-center justify-between p-4 border border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleViewContract(contract.id)}
+                        className="group flex items-center justify-between p-4 border border-border rounded-lg cursor-pointer hover:bg-muted/50 hover:border-primary/20 transition-all duration-200"
+                        onClick={() => handleViewContract(contract)}
+                        title="Click để xem chi tiết hợp đồng"
                       >
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-2">
@@ -332,6 +338,7 @@ export default function Dashboard() {
                             </span>
                           </div>
                         </div>
+                        <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     ))}
                     {!loading && recentContracts.length === 0 && (
@@ -466,6 +473,27 @@ export default function Dashboard() {
               </DialogDescription>
             </DialogHeader>
             <ContractorForm onClose={() => setIsContractorDialogOpen(false)} />
+          </DialogContent>
+        </Dialog>
+
+        {/* Contract Details Dialog */}
+        <Dialog
+          open={isContractDetailsDialogOpen}
+          onOpenChange={setIsContractDetailsDialogOpen}
+        >
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Chi tiết hợp đồng</DialogTitle>
+              <DialogDescription>
+                Thông tin chi tiết và lịch sử giao dịch blockchain
+              </DialogDescription>
+            </DialogHeader>
+            {selectedContract && (
+              <ContractDetails
+                contract={selectedContract}
+                onClose={() => setIsContractDetailsDialogOpen(false)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </div>

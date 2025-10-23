@@ -1,0 +1,63 @@
+{
+  "name": "government-contracts-network",
+  "version": "1.0.0",
+  "client": {
+    "organization": "GovernmentMSP",
+    "connection": {
+      "timeout": {
+        "peer": {
+          "endorser": "300"
+        }
+      }
+    }
+  },
+  "organizations": {
+    "GovernmentMSP": {
+      "mspid": "GovernmentMSP",
+      "peers": [
+        "peer0.government.example.com"
+      ],
+      "certificateAuthorities": [
+        "ca.government.example.com"
+      ]
+    }
+  },
+  "orderers": {
+    "orderer.example.com": {
+      "url": "grpc://localhost:7050"
+    }
+  },
+  "peers": {
+    "peer0.government.example.com": {
+      "url": "grpc://localhost:7051",
+      "eventUrl": "grpc://localhost:7053"
+    }
+  },
+  "certificateAuthorities": {
+    "ca.government.example.com": {
+      "url": "https://localhost:7054",
+      "caName": "ca.government.example.com",
+      "tlsCACerts": {
+        "pem": ["-----BEGIN CERTIFICATE-----\nMIICATCCAWoCCQC8j8ON2n3afjANBgkqhkiG9w0BAQsFADBUMQswCQYDVQQGEwJV\nUzELMAkGA1UECAwCQ0ExCzAJBgNVBAcMAkxBMQswCQYDVQQKDAJHQjELMAkGA1UE\nCwwCR0MxCzAJBgNVBAMMAkNBMB4XDTE5MDQwNTAwMDAwMFoXDTI5MDQwMjAwMDAw\nMFowVDELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMQswCQYDVQQHDAJMQTELMAkG\nA1UECgwCR0IxCzAJBgNVBAcMAkdDMQswCQYDVQQDDAJDQTCCASIwDQYJKoZIhvcN\nAQEBBQADggEPADCCAQoCggEBALm6S0H3tG9MgWfpxMY2+5uQyqO5f0XvJ8Q2K8x9\n-----END CERTIFICATE-----"]
+      },
+      "httpOptions": {
+        "verify": false
+      }
+    }
+  },
+  "channels": {
+    "contract-management": {
+      "orderers": [
+        "orderer.example.com"
+      ],
+      "peers": {
+        "peer0.government.example.com": {
+          "endorsingPeer": true,
+          "chaincodeQuery": true,
+          "ledgerQuery": true,
+          "eventSource": true
+        }
+      }
+    }
+  }
+}

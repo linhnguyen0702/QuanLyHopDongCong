@@ -135,6 +135,7 @@ const auditRoutes = require("./routes/audit");
 const approvalRoutes = require("./routes/approvals"); // Import approval routes
 const adminRoutes = require("./routes/admin"); // Import admin routes
 const settingsRoutes = require("./routes/settings"); // Import settings routes
+const blockchainRoutes = require("./routes/blockchain"); // Import blockchain routes
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -149,6 +150,7 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/approvals", approvalRoutes); // Add approval routes
 app.use("/api/admin", adminRoutes); // Add admin routes (development only)
 app.use("/api/settings", settingsRoutes); // Add settings routes
+app.use("/api/blockchain", blockchainRoutes); // Add blockchain routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {

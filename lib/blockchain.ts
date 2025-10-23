@@ -26,6 +26,8 @@ export interface ContractData {
   status: string
   createdBy: string
   createdAt: string
+  description?: string
+  attachments?: string[]
 }
 
 export interface AuditLogData {
@@ -39,33 +41,36 @@ export interface AuditLogData {
   ipAddress: string
 }
 
-// Mock blockchain configuration
-const BLOCKCHAIN_CONFIG: BlockchainConfig = {
-  networkName: "government-contracts-network",
-  channelName: "contract-management",
-  chaincodeName: "contract-mgmt",
-  mspId: "GovernmentMSP",
-  gatewayPeer: "peer0.government.example.com:7051",
+export interface NetworkStatus {
+  isConnected: boolean
+  blockHeight: number
+  peers: number
+  channels: number
+  chaincodes: number
+  lastBlockTime: Date
+  networkHealth: number
+  transactionThroughput: number
+  error?: string
 }
 
-// Simulate blockchain connection
+// Real blockchain service that connects to backend API
 class BlockchainService {
-  private config: BlockchainConfig
+  private baseUrl: string
   private isConnected = false
 
-  constructor(config: BlockchainConfig) {
-    this.config = config
+  constructor() {
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/blockchain'
   }
 
   async connect(): Promise<boolean> {
     try {
-      // Simulate connection to Hyperledger Fabric network
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      this.isConnected = true
-      console.log(`Connected to blockchain network: ${this.config.networkName}`)
-      return true
+      const response = await fetch(`${this.baseUrl}/test`)
+      const data = await response.json()
+      this.isConnected = data.connected
+      return this.isConnected
     } catch (error) {
       console.error("Failed to connect to blockchain:", error)
+      this.isConnected = false
       return false
     }
   }
@@ -75,158 +80,211 @@ class BlockchainService {
     console.log("Disconnected from blockchain network")
   }
 
-  async submitTransaction(
-    functionName: string,
-    args: string[],
-    transientData?: Record<string, Buffer>,
-  ): Promise<TransactionResult> {
-    if (!this.isConnected) {
-      throw new Error("Not connected to blockchain network")
-    }
-
+  // Contract-specific methods
+  async createContract(contractData: ContractData): Promise<TransactionResult> {
     try {
-      // Simulate transaction submission
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch(`${this.baseUrl}/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(contractData),
+      })
 
-      const txId = this.generateTxId()
-      const blockNumber = Math.floor(Math.random() * 1000) + 12000
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to create contract')
+      }
 
       return {
-        txId,
-        blockNumber,
-        timestamp: new Date(),
+        txId: result.data.txId,
+        blockNumber: result.data.blockNumber,
+        timestamp: new Date(result.data.timestamp),
         status: "SUCCESS",
-        payload: { functionName, args },
+        payload: result.data,
       }
     } catch (error) {
       throw new Error(`Transaction failed: ${error}`)
     }
   }
 
-  async queryLedger(functionName: string, args: string[]): Promise<any> {
-    if (!this.isConnected) {
-      throw new Error("Not connected to blockchain network")
-    }
-
+  async updateContract(contractId: string, updates: Partial<ContractData>): Promise<TransactionResult> {
     try {
-      // Simulate ledger query
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const response = await fetch(`${this.baseUrl}/contracts/${contractId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      })
 
-      // Return mock data based on function name
-      switch (functionName) {
-        case "GetContract":
-          return this.getMockContract(args[0])
-        case "GetAllContracts":
-          return this.getMockContracts()
-        case "GetAuditLogs":
-          return this.getMockAuditLogs(args[0])
-        default:
-          return null
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to update contract')
+      }
+
+      return {
+        txId: result.data.txId,
+        blockNumber: result.data.blockNumber,
+        timestamp: new Date(result.data.timestamp),
+        status: "SUCCESS",
+        payload: result.data,
       }
     } catch (error) {
-      throw new Error(`Query failed: ${error}`)
+      throw new Error(`Transaction failed: ${error}`)
     }
-  }
-
-  // Contract-specific methods
-  async createContract(contractData: ContractData): Promise<TransactionResult> {
-    const args = [contractData.id, JSON.stringify(contractData)]
-    return this.submitTransaction("CreateContract", args)
-  }
-
-  async updateContract(contractId: string, updates: Partial<ContractData>): Promise<TransactionResult> {
-    const args = [contractId, JSON.stringify(updates)]
-    return this.submitTransaction("UpdateContract", args)
   }
 
   async getContract(contractId: string): Promise<ContractData | null> {
-    return this.queryLedger("GetContract", [contractId])
+    try {
+      const response = await fetch(`${this.baseUrl}/contracts/${contractId}`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to get contract')
+      }
+
+      return result.data
+    } catch (error) {
+      console.error(`Failed to get contract ${contractId}:`, error)
+      return null
+    }
   }
 
   async getAllContracts(): Promise<ContractData[]> {
-    return this.queryLedger("GetAllContracts", [])
+    try {
+      const response = await fetch(`${this.baseUrl}/contracts`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to get contracts')
+      }
+
+      return result.data
+    } catch (error) {
+      console.error('Failed to get contracts:', error)
+      return []
+    }
   }
 
   // Audit log methods
   async createAuditLog(auditData: AuditLogData): Promise<TransactionResult> {
-    const args = [auditData.id, JSON.stringify(auditData)]
-    return this.submitTransaction("CreateAuditLog", args)
-  }
+    try {
+      const response = await fetch(`${this.baseUrl}/audit-logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(auditData),
+      })
 
-  async getAuditLogs(entityId?: string): Promise<AuditLogData[]> {
-    return this.queryLedger("GetAuditLogs", entityId ? [entityId] : [])
-  }
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to create audit log')
+      }
 
-  // Utility methods
-  private generateTxId(): string {
-    return `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  }
-
-  private getMockContract(contractId: string): ContractData | null {
-    // Return mock contract data
-    return {
-      id: contractId,
-      title: "Mock Contract",
-      contractor: "Mock Contractor",
-      value: 1000000,
-      startDate: "2024-01-01",
-      endDate: "2024-12-31",
-      status: "active",
-      createdBy: "admin",
-      createdAt: new Date().toISOString(),
+      return {
+        txId: result.data.txId,
+        blockNumber: result.data.blockNumber,
+        timestamp: new Date(result.data.timestamp),
+        status: "SUCCESS",
+        payload: result.data,
+      }
+    } catch (error) {
+      throw new Error(`Transaction failed: ${error}`)
     }
   }
 
-  private getMockContracts(): ContractData[] {
-    // Return mock contracts array
-    return [
-      {
-        id: "HĐ-2024-001",
-        title: "Xây dựng cầu Nhật Tân 2",
-        contractor: "Công ty TNHH ABC Construction",
-        value: 450000000,
-        startDate: "2024-01-15",
-        endDate: "2024-12-31",
-        status: "active",
-        createdBy: "admin",
-        createdAt: "2024-01-15T10:30:00Z",
-      },
-    ]
-  }
+  async getAuditLogs(entityId?: string): Promise<AuditLogData[]> {
+    try {
+      const url = entityId ? `${this.baseUrl}/audit-logs?entityId=${entityId}` : `${this.baseUrl}/audit-logs`
+      const response = await fetch(url)
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to get audit logs')
+      }
 
-  private getMockAuditLogs(entityId?: string): AuditLogData[] {
-    // Return mock audit logs
-    return [
-      {
-        id: "audit-001",
-        action: "CREATE_CONTRACT",
-        entityType: "CONTRACT",
-        entityId: entityId || "HĐ-2024-001",
-        userId: "admin",
-        timestamp: new Date().toISOString(),
-        details: "Contract created",
-        ipAddress: "192.168.1.100",
-      },
-    ]
+      return result.data
+    } catch (error) {
+      console.error('Failed to get audit logs:', error)
+      return []
+    }
   }
 
   // Network status methods
-  async getNetworkStatus() {
-    return {
-      isConnected: this.isConnected,
-      blockHeight: Math.floor(Math.random() * 1000) + 12000,
-      peers: 4,
-      channels: 2,
-      chaincodes: 3,
-      lastBlockTime: new Date(),
-      networkHealth: 95 + Math.random() * 5,
-      transactionThroughput: 200 + Math.floor(Math.random() * 100),
+  async getNetworkStatus(): Promise<NetworkStatus> {
+    try {
+      const response = await fetch(`${this.baseUrl}/status`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        return {
+          isConnected: false,
+          blockHeight: 0,
+          peers: 0,
+          channels: 0,
+          chaincodes: 0,
+          lastBlockTime: new Date(),
+          networkHealth: 0,
+          transactionThroughput: 0,
+          error: result.message || 'Failed to get network status'
+        }
+      }
+
+      return {
+        isConnected: result.data.isConnected,
+        blockHeight: result.data.blockHeight || 0,
+        peers: result.data.peers || 0,
+        channels: result.data.channels || 0,
+        chaincodes: result.data.chaincodes || 0,
+        lastBlockTime: new Date(result.data.lastBlockTime || new Date()),
+        networkHealth: result.data.networkHealth || 0,
+        transactionThroughput: result.data.transactionThroughput || 0,
+        error: result.data.error
+      }
+    } catch (error) {
+      console.error('Failed to get network status:', error)
+      return {
+        isConnected: false,
+        blockHeight: 0,
+        peers: 0,
+        channels: 0,
+        chaincodes: 0,
+        lastBlockTime: new Date(),
+        networkHealth: 0,
+        transactionThroughput: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  // Utility methods
+  async generateContractId(): Promise<string> {
+    try {
+      const response = await fetch(`${this.baseUrl}/generate-contract-id`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to generate contract ID')
+      }
+
+      return result.data.contractId
+    } catch (error) {
+      console.error('Failed to generate contract ID:', error)
+      // Fallback to local generation
+      const year = new Date().getFullYear()
+      const sequence = Math.floor(Math.random() * 999) + 1
+      return `HĐ-${year}-${sequence.toString().padStart(3, '0')}`
     }
   }
 }
 
 // Export singleton instance
-export const blockchainService = new BlockchainService(BLOCKCHAIN_CONFIG)
+export const blockchainService = new BlockchainService()
 
 // Utility functions
 export const formatTxHash = (hash: string): string => {
